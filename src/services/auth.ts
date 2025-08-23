@@ -86,7 +86,6 @@ export class AuthService implements IAuthService {
     });
 
     if (isInvalidEmail) {
-      console.log("EMAIL DUPLICATE");
       throw ApplicationError.invalidEmailOrPassword();
     }
 

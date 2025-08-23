@@ -13,21 +13,21 @@ describe("UserRepository", () => {
   const users: User[] = [
     {
       id: randomUUID(),
-      name: "User 1",
+      name: "user 1",
       email: "user1@example.com",
       password: "password",
       createdAt: addDays(new Date(), -50),
     },
     {
       id: randomUUID(),
-      name: "User 2",
+      name: "user 2",
       email: "user2@example.com",
       password: "password",
       createdAt: addDays(new Date(), -102),
     },
     {
       id: randomUUID(),
-      name: "User 3",
+      name: "user 3",
       email: "user3@example.com",
       password: "password",
       createdAt: addDays(new Date(), -13),
@@ -68,11 +68,11 @@ describe("UserRepository", () => {
     it("should return all users", async () => {
       const databaseUsers = await userRepository.findAll();
 
-      const expectedUsers = expect.arrayContaining(
-        users.map((user) => expect.objectContaining(user))
+      expect(databaseUsers).toEqual(
+        expect.arrayContaining(
+          users.map((user) => expect.objectContaining(user))
+        )
       );
-
-      expect(databaseUsers).toEqual(expectedUsers);
     });
   });
 
@@ -90,9 +90,7 @@ describe("UserRepository", () => {
 
       const databaseUser = await userRepository.findOne({ id: user.id });
 
-      const expectedUser = expect.objectContaining(user);
-
-      expect(databaseUser).toEqual(expectedUser);
+      expect(databaseUser).toEqual(expect.objectContaining(user));
     });
   });
 
@@ -100,7 +98,7 @@ describe("UserRepository", () => {
     it("should create a new user", async () => {
       const user: User = {
         id: randomUUID(),
-        name: "User 4",
+        name: "user 4",
         email: "user4@example.com",
         password: "password",
       };
@@ -109,11 +107,11 @@ describe("UserRepository", () => {
 
       const databaseUsers = await userRepository.findAll();
 
-      const expectedUsers = expect.arrayContaining(
-        [...users, user].map((user) => expect.objectContaining(user))
+      expect(databaseUsers).toEqual(
+        expect.arrayContaining(
+          [...users, user].map((user) => expect.objectContaining(user))
+        )
       );
-
-      expect(databaseUsers).toEqual(expectedUsers);
     });
   });
 });

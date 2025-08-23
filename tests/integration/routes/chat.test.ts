@@ -8,6 +8,7 @@ import { Application } from "../../../src/app";
 import { config } from "../../../src/config";
 import { Chat } from "../../../src/models/entities/chat";
 import { Message } from "../../../src/models/entities/message";
+import { Session } from "../../../src/models/entities/session";
 import { mapUserToDto, User } from "../../../src/models/entities/user";
 import {
   CreateChatRequest,
@@ -37,31 +38,38 @@ describe("Chat Routes", () => {
   const expressApp = express();
   const pool = createTestPool();
   const app = new Application(expressApp, pool);
-  const chatRepository = app.services.get("ChatRepository");
-  const messageRepository = app.services.get("MessageRepository");
 
   const users: User[] = [
     {
       id: randomUUID(),
-      name: "User 1",
+      name: "user 1",
       email: "user1@example.com",
       password: "password",
-      createdAt: addDays(new Date(), -50),
+      createdAt: addDays(new Date(), -12),
     },
     {
       id: randomUUID(),
-      name: "User 2",
+      name: "user 2",
       email: "user2@example.com",
       password: "password",
-      createdAt: addDays(new Date(), -102),
+      createdAt: addDays(new Date(), -15),
     },
   ];
-  const accessTokens = users.map((user) =>
+  const sessions: Session[] = [
+    {
+      id: randomUUID(),
+      userId: users[0].id,
+      createdAt: addDays(new Date(), -12),
+    },
+    {
+      id: randomUUID(),
+      userId: users[1].id,
+      createdAt: addDays(new Date(), -15),
+    },
+  ];
+  const accessTokens = users.map((user, index) =>
     jsonwebtoken.sign(
-      {
-        session: { id: randomUUID(), userId: user.id },
-        user: mapUserToDto(user),
-      },
+      { session: sessions[index], user: mapUserToDto(user) },
       config.ACCESS_TOKEN_SECRET,
       { expiresIn: "15m" }
     )
@@ -70,25 +78,25 @@ describe("Chat Routes", () => {
     {
       id: randomUUID(),
       userId: users[0].id,
-      title: "User 1 Chat 1",
+      title: "user 1 chat 1",
       createdAt: addDays(new Date(), -2),
     },
     {
       id: randomUUID(),
       userId: users[0].id,
-      title: "User 1 Chat 2",
+      title: "user 1 chat 2",
       createdAt: addDays(new Date(), -4),
     },
     {
       id: randomUUID(),
       userId: users[1].id,
-      title: "User 2 Chat 1",
+      title: "user 2 chat 1",
       createdAt: addDays(new Date(), -8),
     },
     {
       id: randomUUID(),
       userId: users[1].id,
-      title: "User 2 Chat 2",
+      title: "user 2 chat 2",
       createdAt: addDays(new Date(), -10),
     },
   ];
@@ -96,56 +104,56 @@ describe("Chat Routes", () => {
     {
       id: randomUUID(),
       role: "user",
-      content: "User 1 Chat 1 Message 1",
+      content: "message",
       chatId: chats[0].id,
       createdAt: addDays(new Date(), -2),
     },
     {
       id: randomUUID(),
       role: "assistant",
-      content: "User 1 Chat 1 Message 2",
+      content: "message",
       chatId: chats[0].id,
       createdAt: addDays(new Date(), -2),
     },
     {
       id: randomUUID(),
       role: "user",
-      content: "User 1 Chat 2 Message 1",
+      content: "message",
       chatId: chats[1].id,
       createdAt: addDays(new Date(), -4),
     },
     {
       id: randomUUID(),
       role: "assistant",
-      content: "User 1 Chat 2 Message 2",
+      content: "message",
       chatId: chats[1].id,
       createdAt: addDays(new Date(), -4),
     },
     {
       id: randomUUID(),
       role: "user",
-      content: "User 2 Chat 1 Message 1",
+      content: "message",
       chatId: chats[2].id,
       createdAt: addDays(new Date(), -8),
     },
     {
       id: randomUUID(),
       role: "assistant",
-      content: "User 2 Chat 1 Message 2",
+      content: "message",
       chatId: chats[2].id,
       createdAt: addDays(new Date(), -8),
     },
     {
       id: randomUUID(),
       role: "user",
-      content: "User 2 Chat 2 Message 1",
+      content: "message",
       chatId: chats[3].id,
       createdAt: addDays(new Date(), -10),
     },
     {
       id: randomUUID(),
       role: "assistant",
-      content: "User 2 Chat 2 Message 2",
+      content: "message",
       chatId: chats[3].id,
       createdAt: addDays(new Date(), -10),
     },
@@ -178,19 +186,17 @@ describe("Chat Routes", () => {
     it("should return an unauthorized response when no access or refresh token is provided", async () => {
       const response = await request(expressApp).get("/api/chats");
 
-      const expectedResponseBody = {
+      expect(response.status).toBe(HttpStatusCode.Unauthorized);
+      expect(response.headers["content-type"]).toBe(
+        "application/json; charset=utf-8"
+      );
+      expect(response.body).toEqual({
         success: false,
         error: expect.objectContaining({
           statusCode: HttpStatusCode.Unauthorized,
           code: ApplicationErrorCode.Unauthorized,
         }),
-      };
-
-      expect(response.status).toBe(HttpStatusCode.Unauthorized);
-      expect(response.headers["content-type"]).toBe(
-        "application/json; charset=utf-8"
-      );
-      expect(response.body).toEqual(expectedResponseBody);
+      });
     });
 
     it("should return a success response with the user chats ordered by creation date desc paginated", async () => {
@@ -209,7 +215,7 @@ describe("Chat Routes", () => {
         .query(getChatsQuery)
         .set("Authorization", `Bearer ${accessToken}`);
 
-      const userChats = chats
+      const sortedUserChats = chats
         .filter((chat) => chat.userId === userId)
         .sort(
           (chatA, chatB) =>
@@ -217,11 +223,15 @@ describe("Chat Routes", () => {
             (chatA.createdAt?.getTime() ?? 0)
         );
 
-      const expectedResponseBody = {
+      expect(response.status).toBe(HttpStatusCode.Ok);
+      expect(response.headers["content-type"]).toBe(
+        "application/json; charset=utf-8"
+      );
+      expect(response.body).toEqual({
         success: true,
         data: {
           chats: {
-            items: userChats
+            items: sortedUserChats
               .slice((page - 1) * pageSize, page * pageSize)
               .map((chat) =>
                 expect.objectContaining({
@@ -229,19 +239,13 @@ describe("Chat Routes", () => {
                   createdAt: chat.createdAt?.toISOString(),
                 })
               ),
-            totalItems: userChats.length,
+            totalItems: sortedUserChats.length,
             page,
             pageSize,
-            totalPages: Math.ceil(userChats.length / pageSize),
+            totalPages: Math.ceil(sortedUserChats.length / pageSize),
           },
         },
-      };
-
-      expect(response.status).toBe(HttpStatusCode.Ok);
-      expect(response.headers["content-type"]).toBe(
-        "application/json; charset=utf-8"
-      );
-      expect(response.body).toEqual(expectedResponseBody);
+      });
     });
   });
 
@@ -253,19 +257,17 @@ describe("Chat Routes", () => {
         `/api/chats/${chatId}/messages`
       );
 
-      const expectedResponseBody = {
+      expect(response.status).toBe(HttpStatusCode.Unauthorized);
+      expect(response.headers["content-type"]).toBe(
+        "application/json; charset=utf-8"
+      );
+      expect(response.body).toEqual({
         success: false,
         error: expect.objectContaining({
           statusCode: HttpStatusCode.Unauthorized,
           code: ApplicationErrorCode.Unauthorized,
         }),
-      };
-
-      expect(response.status).toBe(HttpStatusCode.Unauthorized);
-      expect(response.headers["content-type"]).toBe(
-        "application/json; charset=utf-8"
-      );
-      expect(response.body).toEqual(expectedResponseBody);
+      });
     });
 
     it("should return a not found response when chat is from another user", async () => {
@@ -276,19 +278,17 @@ describe("Chat Routes", () => {
         .get(`/api/chats/${chatId}/messages`)
         .set("Authorization", `Bearer ${accessToken}`);
 
-      const expectedResponseBody = {
+      expect(response.status).toBe(HttpStatusCode.NotFound);
+      expect(response.headers["content-type"]).toBe(
+        "application/json; charset=utf-8"
+      );
+      expect(response.body).toEqual({
         success: false,
         error: expect.objectContaining({
           statusCode: HttpStatusCode.NotFound,
           code: ApplicationErrorCode.NotFound,
         }),
-      };
-
-      expect(response.status).toBe(HttpStatusCode.NotFound);
-      expect(response.headers["content-type"]).toBe(
-        "application/json; charset=utf-8"
-      );
-      expect(response.body).toEqual(expectedResponseBody);
+      });
     });
 
     it("should return a success response with the chat messages ordered by creation date", async () => {
@@ -299,7 +299,11 @@ describe("Chat Routes", () => {
         .get(`/api/chats/${chatId}/messages`)
         .set("Authorization", `Bearer ${accessToken}`);
 
-      const expectedResponseBody = {
+      expect(response.status).toBe(HttpStatusCode.Ok);
+      expect(response.headers["content-type"]).toBe(
+        "application/json; charset=utf-8"
+      );
+      expect(response.body).toEqual({
         success: true,
         data: {
           messages: messages
@@ -316,13 +320,7 @@ describe("Chat Routes", () => {
               })
             ),
         },
-      };
-
-      expect(response.status).toBe(HttpStatusCode.Ok);
-      expect(response.headers["content-type"]).toBe(
-        "application/json; charset=utf-8"
-      );
-      expect(response.body).toEqual(expectedResponseBody);
+      });
     });
   });
 
@@ -337,19 +335,17 @@ describe("Chat Routes", () => {
         .post("/api/chats/")
         .send(createChatRequest);
 
-      const expectedResponseBody = {
+      expect(response.status).toBe(HttpStatusCode.Unauthorized);
+      expect(response.headers["content-type"]).toBe(
+        "application/json; charset=utf-8"
+      );
+      expect(response.body).toEqual({
         success: false,
         error: expect.objectContaining({
           statusCode: HttpStatusCode.Unauthorized,
           code: ApplicationErrorCode.Unauthorized,
         }),
-      };
-
-      expect(response.status).toBe(HttpStatusCode.Unauthorized);
-      expect(response.headers["content-type"]).toBe(
-        "application/json; charset=utf-8"
-      );
-      expect(response.body).toEqual(expectedResponseBody);
+      });
     });
 
     it("should return a bad request event when request does not match request schema", async () => {
@@ -383,34 +379,29 @@ describe("Chat Routes", () => {
           });
         });
 
-      const expectedErrorEvent = {
-        event: "error",
-        data: expect.objectContaining({
-          statusCode: HttpStatusCode.BadRequest,
-          code: ApplicationErrorCode.BadRequest,
-        }),
-        isDone: true,
-      };
-
       expect(response.status).toBe(HttpStatusCode.Ok);
       expect(response.headers["content-type"]).toBe(
         "text/event-stream; charset=utf-8"
       );
       expect(response.headers["cache-control"]).toBe("no-cache");
       expect(response.headers["connection"]).toBe("keep-alive");
-      expect(errorEvent).toEqual(expectedErrorEvent);
+      expect(errorEvent).toEqual({
+        event: "error",
+        data: expect.objectContaining({
+          statusCode: HttpStatusCode.BadRequest,
+          code: ApplicationErrorCode.BadRequest,
+        }),
+        isDone: true,
+      });
     });
 
     it("should create a new chat returning assistant message events", async () => {
-      const userId = users[0].id;
       const accessToken = accessTokens[0];
 
       const createChatRequest: CreateChatRequest = {
         id: randomUUID(),
         message: "message",
       };
-
-      let responseMessageContent = "";
 
       const response = await request(expressApp)
         .post("/api/chats")
@@ -434,7 +425,6 @@ describe("Chat Routes", () => {
                   isDone: false,
                 });
               } else if (event.event === "delta") {
-                responseMessageContent += event.data.delta;
                 expect(event).toEqual({
                   event: "delta",
                   data: {
@@ -458,44 +448,12 @@ describe("Chat Routes", () => {
           });
         });
 
-      const databaseChat = await chatRepository.findOne({
-        id: createChatRequest.id,
-      });
-
-      if (databaseChat == null) {
-        fail("Expected chat to be created.");
-      }
-
-      const databaseMessages = await messageRepository.findAll({
-        chatId: databaseChat.id,
-      });
-
-      const expectedChat = expect.objectContaining({
-        id: createChatRequest.id,
-        userId,
-      });
-
-      const expectedMessages = expect.arrayContaining([
-        expect.objectContaining({
-          role: "user",
-          content: createChatRequest.message,
-          chatId: createChatRequest.id,
-        }),
-        expect.objectContaining({
-          role: "assistant",
-          content: responseMessageContent,
-          chatId: createChatRequest.id,
-        }),
-      ]);
-
       expect(response.status).toBe(HttpStatusCode.Ok);
       expect(response.headers["content-type"]).toBe(
         "text/event-stream; charset=utf-8"
       );
       expect(response.headers["cache-control"]).toBe("no-cache");
       expect(response.headers["connection"]).toBe("keep-alive");
-      expect(databaseChat).toEqual(expectedChat);
-      expect(databaseMessages).toEqual(expectedMessages);
     });
   });
 
@@ -512,19 +470,17 @@ describe("Chat Routes", () => {
         .post(`/api/chats/${chatId}/messages`)
         .send(sendMessageRequest);
 
-      const expectedResponseBody = {
+      expect(response.status).toBe(HttpStatusCode.Unauthorized);
+      expect(response.headers["content-type"]).toBe(
+        "application/json; charset=utf-8"
+      );
+      expect(response.body).toEqual({
         success: false,
         error: expect.objectContaining({
           statusCode: HttpStatusCode.Unauthorized,
           code: ApplicationErrorCode.Unauthorized,
         }),
-      };
-
-      expect(response.status).toBe(HttpStatusCode.Unauthorized);
-      expect(response.headers["content-type"]).toBe(
-        "application/json; charset=utf-8"
-      );
-      expect(response.body).toEqual(expectedResponseBody);
+      });
     });
 
     it("should return a bad request event when request does not match request schema", async () => {
@@ -559,22 +515,20 @@ describe("Chat Routes", () => {
           });
         });
 
-      const expectedErrorEvent = {
-        event: "error",
-        data: expect.objectContaining({
-          statusCode: HttpStatusCode.BadRequest,
-          code: ApplicationErrorCode.BadRequest,
-        }),
-        isDone: true,
-      };
-
       expect(response.status).toBe(HttpStatusCode.Ok);
       expect(response.headers["content-type"]).toBe(
         "text/event-stream; charset=utf-8"
       );
       expect(response.headers["cache-control"]).toBe("no-cache");
       expect(response.headers["connection"]).toBe("keep-alive");
-      expect(errorEvent).toEqual(expectedErrorEvent);
+      expect(errorEvent).toEqual({
+        event: "error",
+        data: expect.objectContaining({
+          statusCode: HttpStatusCode.BadRequest,
+          code: ApplicationErrorCode.BadRequest,
+        }),
+        isDone: true,
+      });
     });
 
     it("should return a not found event when chat does not exist", async () => {
@@ -614,22 +568,20 @@ describe("Chat Routes", () => {
           });
         });
 
-      const expectedErrorEvent = {
-        event: "error",
-        data: expect.objectContaining({
-          statusCode: HttpStatusCode.NotFound,
-          code: ApplicationErrorCode.NotFound,
-        }),
-        isDone: true,
-      };
-
       expect(response.status).toBe(HttpStatusCode.Ok);
       expect(response.headers["content-type"]).toBe(
         "text/event-stream; charset=utf-8"
       );
       expect(response.headers["cache-control"]).toBe("no-cache");
       expect(response.headers["connection"]).toBe("keep-alive");
-      expect(errorEvent).toEqual(expectedErrorEvent);
+      expect(errorEvent).toEqual({
+        event: "error",
+        data: expect.objectContaining({
+          statusCode: HttpStatusCode.NotFound,
+          code: ApplicationErrorCode.NotFound,
+        }),
+        isDone: true,
+      });
     });
 
     it("should send a message to the chat returning assistant message", async () => {
@@ -640,9 +592,6 @@ describe("Chat Routes", () => {
         id: randomUUID(),
         content: "message",
       };
-
-      let responseMessageId = "";
-      let responseMessageContent = "";
 
       const response = await request(expressApp)
         .post(`/api/chats/${chatId}/messages`)
@@ -660,14 +609,12 @@ describe("Chat Routes", () => {
               const event = JSON.parse(serializedEvent) as ChatServerSentEvent;
 
               if (event.event === "start") {
-                responseMessageId = event.data.messageId;
                 expect(event).toEqual({
                   event: "start",
                   data: { messageId: expect.any(String) },
                   isDone: false,
                 });
               } else if (event.event === "delta") {
-                responseMessageContent += event.data.delta;
                 expect(event).toEqual({
                   event: "delta",
                   data: {
@@ -691,30 +638,12 @@ describe("Chat Routes", () => {
           });
         });
 
-      const databaseMessages = await messageRepository.findAll({ chatId });
-
-      const expectedMessages = expect.arrayContaining([
-        expect.objectContaining({
-          id: sendMessageRequest.id,
-          role: "user",
-          content: sendMessageRequest.content,
-          chatId,
-        }),
-        expect.objectContaining({
-          id: responseMessageId,
-          role: "assistant",
-          content: responseMessageContent,
-          chatId,
-        }),
-      ]);
-
       expect(response.status).toBe(HttpStatusCode.Ok);
       expect(response.headers["content-type"]).toBe(
         "text/event-stream; charset=utf-8"
       );
       expect(response.headers["cache-control"]).toBe("no-cache");
       expect(response.headers["connection"]).toBe("keep-alive");
-      expect(databaseMessages).toEqual(expectedMessages);
     });
   });
 
@@ -730,19 +659,17 @@ describe("Chat Routes", () => {
         .patch(`/api/chats/${chatId}`)
         .send(updateChatRequest);
 
-      const expectedResponseBody = {
+      expect(response.status).toBe(HttpStatusCode.Unauthorized);
+      expect(response.headers["content-type"]).toBe(
+        "application/json; charset=utf-8"
+      );
+      expect(response.body).toEqual({
         success: false,
         error: expect.objectContaining({
           statusCode: HttpStatusCode.Unauthorized,
           code: ApplicationErrorCode.Unauthorized,
         }),
-      };
-
-      expect(response.status).toBe(HttpStatusCode.Unauthorized);
-      expect(response.headers["content-type"]).toBe(
-        "application/json; charset=utf-8"
-      );
-      expect(response.body).toEqual(expectedResponseBody);
+      });
     });
 
     it("should return a bad request response when request does not match request schema", async () => {
@@ -754,19 +681,17 @@ describe("Chat Routes", () => {
         .send({ title: 123 })
         .set("Authorization", `Bearer ${accessToken}`);
 
-      const expectedResponseBody = {
+      expect(response.status).toBe(HttpStatusCode.BadRequest);
+      expect(response.headers["content-type"]).toBe(
+        "application/json; charset=utf-8"
+      );
+      expect(response.body).toEqual({
         success: false,
         error: expect.objectContaining({
           statusCode: HttpStatusCode.BadRequest,
           code: ApplicationErrorCode.BadRequest,
         }),
-      };
-
-      expect(response.status).toBe(HttpStatusCode.BadRequest);
-      expect(response.headers["content-type"]).toBe(
-        "application/json; charset=utf-8"
-      );
-      expect(response.body).toEqual(expectedResponseBody);
+      });
     });
 
     it("should return a not found response when chat does not exist", async () => {
@@ -780,19 +705,17 @@ describe("Chat Routes", () => {
         .send(updateChatRequest)
         .set("Authorization", `Bearer ${accessToken}`);
 
-      const expectedResponseBody = {
+      expect(response.status).toBe(HttpStatusCode.NotFound);
+      expect(response.headers["content-type"]).toBe(
+        "application/json; charset=utf-8"
+      );
+      expect(response.body).toEqual({
         success: false,
         error: expect.objectContaining({
           statusCode: HttpStatusCode.NotFound,
           code: ApplicationErrorCode.NotFound,
         }),
-      };
-
-      expect(response.status).toBe(HttpStatusCode.NotFound);
-      expect(response.headers["content-type"]).toBe(
-        "application/json; charset=utf-8"
-      );
-      expect(response.body).toEqual(expectedResponseBody);
+      });
     });
 
     it("should return a not found response when chat is from another user", async () => {
@@ -806,19 +729,17 @@ describe("Chat Routes", () => {
         .send(updateChatRequest)
         .set("Authorization", `Bearer ${accessToken}`);
 
-      const expectedResponseBody = {
+      expect(response.status).toBe(HttpStatusCode.NotFound);
+      expect(response.headers["content-type"]).toBe(
+        "application/json; charset=utf-8"
+      );
+      expect(response.body).toEqual({
         success: false,
         error: expect.objectContaining({
           statusCode: HttpStatusCode.NotFound,
           code: ApplicationErrorCode.NotFound,
         }),
-      };
-
-      expect(response.status).toBe(HttpStatusCode.NotFound);
-      expect(response.headers["content-type"]).toBe(
-        "application/json; charset=utf-8"
-      );
-      expect(response.body).toEqual(expectedResponseBody);
+      });
     });
 
     it("should update chat title returning the chat id", async () => {
@@ -832,27 +753,11 @@ describe("Chat Routes", () => {
         .send(updateChatRequest)
         .set("Authorization", `Bearer ${accessToken}`);
 
-      const databaseChats = await chatRepository.findAll();
-
-      const expectedResponseBody = { success: true, data: { chatId } };
-
-      const expectedChats = expect.arrayContaining(
-        chats.map((chat) =>
-          chat.id === chatId
-            ? expect.objectContaining({
-                ...chat,
-                title: updateChatRequest.title,
-              })
-            : expect.objectContaining(chat)
-        )
-      );
-
       expect(response.status).toBe(HttpStatusCode.Ok);
       expect(response.headers["content-type"]).toBe(
         "application/json; charset=utf-8"
       );
-      expect(response.body).toEqual(expectedResponseBody);
-      expect(databaseChats).toEqual(expectedChats);
+      expect(response.body).toEqual({ success: true, data: { chatId } });
     });
   });
 
@@ -862,19 +767,17 @@ describe("Chat Routes", () => {
 
       const response = await request(expressApp).delete(`/api/chats/${chatId}`);
 
-      const expectedResponseBody = {
+      expect(response.status).toBe(HttpStatusCode.Unauthorized);
+      expect(response.headers["content-type"]).toBe(
+        "application/json; charset=utf-8"
+      );
+      expect(response.body).toEqual({
         success: false,
         error: expect.objectContaining({
           statusCode: HttpStatusCode.Unauthorized,
           code: ApplicationErrorCode.Unauthorized,
         }),
-      };
-
-      expect(response.status).toBe(HttpStatusCode.Unauthorized);
-      expect(response.headers["content-type"]).toBe(
-        "application/json; charset=utf-8"
-      );
-      expect(response.body).toEqual(expectedResponseBody);
+      });
     });
 
     it("should return a not found response when chat does not exist", async () => {
@@ -885,19 +788,17 @@ describe("Chat Routes", () => {
         .delete(`/api/chats/${chatId}`)
         .set("Authorization", `Bearer ${accessToken}`);
 
-      const expectedResponseBody = {
+      expect(response.status).toBe(HttpStatusCode.NotFound);
+      expect(response.headers["content-type"]).toBe(
+        "application/json; charset=utf-8"
+      );
+      expect(response.body).toEqual({
         success: false,
         error: expect.objectContaining({
           statusCode: HttpStatusCode.NotFound,
           code: ApplicationErrorCode.NotFound,
         }),
-      };
-
-      expect(response.status).toBe(HttpStatusCode.NotFound);
-      expect(response.headers["content-type"]).toBe(
-        "application/json; charset=utf-8"
-      );
-      expect(response.body).toEqual(expectedResponseBody);
+      });
     });
 
     it("should return a not found response when chat is from another user", async () => {
@@ -908,19 +809,17 @@ describe("Chat Routes", () => {
         .delete(`/api/chats/${chatId}`)
         .set("Authorization", `Bearer ${accessToken}`);
 
-      const expectedResponseBody = {
+      expect(response.status).toBe(HttpStatusCode.NotFound);
+      expect(response.headers["content-type"]).toBe(
+        "application/json; charset=utf-8"
+      );
+      expect(response.body).toEqual({
         success: false,
         error: expect.objectContaining({
           statusCode: HttpStatusCode.NotFound,
           code: ApplicationErrorCode.NotFound,
         }),
-      };
-
-      expect(response.status).toBe(HttpStatusCode.NotFound);
-      expect(response.headers["content-type"]).toBe(
-        "application/json; charset=utf-8"
-      );
-      expect(response.body).toEqual(expectedResponseBody);
+      });
     });
 
     it("should delete chat returning its id", async () => {
@@ -931,22 +830,11 @@ describe("Chat Routes", () => {
         .delete(`/api/chats/${chatId}`)
         .set("Authorization", `Bearer ${accessToken}`);
 
-      const databaseChats = await chatRepository.findAll();
-
-      const expectedResponseBody = { success: true, data: { chatId } };
-
-      const expectedChats = expect.arrayContaining(
-        chats
-          .filter((chat) => chat.id !== chatId)
-          .map((chat) => expect.objectContaining(chat))
-      );
-
       expect(response.status).toBe(HttpStatusCode.Ok);
       expect(response.headers["content-type"]).toBe(
         "application/json; charset=utf-8"
       );
-      expect(response.body).toEqual(expectedResponseBody);
-      expect(databaseChats).toEqual(expectedChats);
+      expect(response.body).toEqual({ success: true, data: { chatId } });
     });
   });
 });

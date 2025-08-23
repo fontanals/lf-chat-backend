@@ -25,7 +25,6 @@ export class ApplicationError extends Error {
     message: string
   ) {
     super(message);
-    this.name = "Application Error";
     this.statusCode = statusCode;
     this.code = code;
   }

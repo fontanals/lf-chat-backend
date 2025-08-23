@@ -1,3 +1,4 @@
+import { randomUUID } from "crypto";
 import { IDataContext } from "../../../src/data/context";
 import { RefreshToken } from "../../../src/models/entities/refresh-token";
 import { RefreshTokenRepository } from "../../../src/repositories/refresh-token";
@@ -28,38 +29,28 @@ describe("RefreshTokenRepository", () => {
     });
 
     it("should return refresh tokens", async () => {
-      const refreshTokens: RefreshToken[] = [
+      const mockRefreshTokens: RefreshToken[] = [
         {
-          id: "refresh-token-1",
-          token: "refresh-token-1",
+          id: randomUUID(),
+          token: "token",
           expiresAt: new Date(),
           isRevoked: false,
-          sessionId: "session-id",
-          createdAt: new Date(),
+          sessionId: randomUUID(),
         },
         {
-          id: "refresh-token-2",
-          token: "refresh-token-2",
+          id: randomUUID(),
+          token: "token",
           expiresAt: new Date(),
           isRevoked: false,
-          sessionId: "session-id",
-          createdAt: new Date(),
-        },
-        {
-          id: "refresh-token-3",
-          token: "refresh-token-3",
-          expiresAt: new Date(),
-          isRevoked: false,
-          sessionId: "session-id",
-          createdAt: new Date(),
+          sessionId: randomUUID(),
         },
       ];
 
-      dataContext.query.mockResolvedValue({ rows: refreshTokens });
+      dataContext.query.mockResolvedValue({ rows: mockRefreshTokens });
 
-      const result = await refreshTokenRepository.findAll();
+      const refreshTokens = await refreshTokenRepository.findAll();
 
-      expect(result).toEqual(refreshTokens);
+      expect(refreshTokens).toEqual(mockRefreshTokens);
     });
   });
 
@@ -67,25 +58,25 @@ describe("RefreshTokenRepository", () => {
     it("should return null when no refresh token is found", async () => {
       dataContext.query.mockResolvedValue({ rows: [] });
 
-      const result = await refreshTokenRepository.findOne();
+      const refreshToken = await refreshTokenRepository.findOne();
 
-      expect(result).toBeNull();
+      expect(refreshToken).toBeNull();
     });
 
     it("should return refresh token", async () => {
-      const refreshToken: RefreshToken = {
-        id: "refresh-token-id",
-        token: "refresh-token",
+      const mockRefreshToken: RefreshToken = {
+        id: randomUUID(),
+        token: "token",
         expiresAt: new Date(),
-        sessionId: "session-id",
-        createdAt: new Date(),
+        isRevoked: false,
+        sessionId: randomUUID(),
       };
 
-      dataContext.query.mockResolvedValue({ rows: [refreshToken] });
+      dataContext.query.mockResolvedValue({ rows: [mockRefreshToken] });
 
-      const result = await refreshTokenRepository.findOne();
+      const refreshToken = await refreshTokenRepository.findOne();
 
-      expect(result).toEqual(refreshToken);
+      expect(refreshToken).toEqual(mockRefreshToken);
     });
   });
 });

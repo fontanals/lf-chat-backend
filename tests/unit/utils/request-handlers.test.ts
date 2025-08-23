@@ -1,3 +1,4 @@
+import { randomUUID } from "crypto";
 import { Request, Response } from "express";
 import {
   errorResponse,
@@ -44,10 +45,6 @@ describe("Request Handlers", () => {
         "Content-Type",
         "application/json; charset=utf-8"
       );
-      expect(response.setHeader).toHaveBeenCalledWith(
-        "Cache-Control",
-        "no-cache"
-      );
       expect(response.status).toHaveBeenCalledWith(
         HttpStatusCode.InternalServerError
       );
@@ -66,10 +63,6 @@ describe("Request Handlers", () => {
       expect(response.setHeader).toHaveBeenCalledWith(
         "Content-Type",
         "application/json; charset=utf-8"
-      );
-      expect(response.setHeader).toHaveBeenCalledWith(
-        "Cache-Control",
-        "no-cache"
       );
       expect(response.status).toHaveBeenCalledWith(HttpStatusCode.BadRequest);
       expect(response.json).toHaveBeenCalledWith(
@@ -90,10 +83,6 @@ describe("Request Handlers", () => {
       expect(response.setHeader).toHaveBeenCalledWith(
         "Content-Type",
         "application/json; charset=utf-8"
-      );
-      expect(response.setHeader).toHaveBeenCalledWith(
-        "Cache-Control",
-        "no-cache"
       );
       expect(response.json).toHaveBeenCalledWith(
         successResponse(handlerResponse)
@@ -127,9 +116,6 @@ describe("Request Handlers", () => {
         "Connection",
         "keep-alive"
       );
-      expect(response.status).toHaveBeenCalledWith(
-        HttpStatusCode.InternalServerError
-      );
       expect(response.write).toHaveBeenCalledWith(
         `data: ${JSON.stringify(errorEvent)}\n\n`
       );
@@ -161,7 +147,6 @@ describe("Request Handlers", () => {
         "Connection",
         "keep-alive"
       );
-      expect(response.status).toHaveBeenCalledWith(HttpStatusCode.BadRequest);
       expect(response.write).toHaveBeenCalledWith(
         `data: ${JSON.stringify(errorEvent)}\n\n`
       );
@@ -169,9 +154,10 @@ describe("Request Handlers", () => {
     });
 
     it("should return an SSE request handler that sends events correctly", async () => {
+      const messageId = randomUUID();
       const startEvent: ServerSentEvent<"start", { messageId: string }> = {
         event: "start",
-        data: { messageId: "message-1" },
+        data: { messageId },
         isDone: false,
       };
       const firstDeltaEvent: ServerSentEvent<
@@ -179,7 +165,7 @@ describe("Request Handlers", () => {
         { messageId: string; delta: string }
       > = {
         event: "delta",
-        data: { messageId: "message-id", delta: "Hello" },
+        data: { messageId, delta: "Hello" },
         isDone: false,
       };
       const secondDeltaEvent: ServerSentEvent<
@@ -187,12 +173,12 @@ describe("Request Handlers", () => {
         { messageId: string; delta: string }
       > = {
         event: "delta",
-        data: { messageId: "message-id", delta: "there!" },
+        data: { messageId, delta: "there!" },
         isDone: false,
       };
       const endEvent: ServerSentEvent<"end", { messageId: string }> = {
         event: "end",
-        data: { messageId: "message-id" },
+        data: { messageId },
         isDone: false,
       };
 

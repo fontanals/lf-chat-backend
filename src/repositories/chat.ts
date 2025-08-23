@@ -1,7 +1,6 @@
 import { IDataContext } from "../data/context";
 import { Chat } from "../models/entities/chat";
 import { ArrayUtils } from "../utils/arrays";
-import { SqlUtils } from "../utils/sql";
 import { NullablePartial, Paginated } from "../utils/types";
 
 type ChatFilters = NullablePartial<Chat>;
@@ -110,14 +109,9 @@ export class ChatRepository implements IChatRepository {
     );
 
     const totalItems = result.rows[0]?.totalItems ?? 0;
+    const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
 
-    return {
-      items: result.rows,
-      totalItems,
-      page,
-      pageSize,
-      totalPages: Math.ceil(totalItems / pageSize),
-    };
+    return { items: result.rows, totalItems, page, pageSize, totalPages };
   }
 
   async findOne(filters?: ChatFilters): Promise<Chat | null> {

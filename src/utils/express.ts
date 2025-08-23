@@ -15,7 +15,10 @@ export function getQueryNumber(value: any): number | undefined;
 export function getQueryNumber(value: any, fallbackValue: number): number;
 
 export function getQueryNumber(value: any, fallbackValue?: number) {
-  const parsedValue = parseInt(value ?? "");
+  if (value == null || typeof value !== "string") {
+    return fallbackValue;
+  }
+  const parsedValue = parseInt(value);
   return !isNaN(parsedValue) ? parsedValue : fallbackValue;
 }
 

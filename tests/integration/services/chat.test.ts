@@ -1,35 +1,37 @@
 import { randomUUID } from "crypto";
 import { addDays } from "date-fns";
-import { Pool } from "pg";
 import { DataContext } from "../../../src/data/context";
 import { Chat } from "../../../src/models/entities/chat";
 import { Message } from "../../../src/models/entities/message";
+import { Session } from "../../../src/models/entities/session";
+import { mapUserToDto, User } from "../../../src/models/entities/user";
 import {
   CreateChatRequest,
   DeleteChatParams,
   GetChatMessagesParams,
-  RenameChatParams,
-  RenameChatRequest,
+  GetChatsQuery,
   SendMessageParams,
   SendMessageRequest,
+  UpdateChatParams,
+  UpdateChatRequest,
 } from "../../../src/models/requests/chat";
 import { ChatRepository } from "../../../src/repositories/chat";
 import { MessageRepository } from "../../../src/repositories/message";
 import { AssistantService } from "../../../src/services/assistant";
 import { AuthContext } from "../../../src/services/auth";
 import { ChatService } from "../../../src/services/chat";
-import { NumberUtils } from "../../../src/utils/numbers";
-import { SqlUtils } from "../../../src/utils/sql";
-import { testConfig } from "../../config";
+import {
+  createTestPool,
+  insertChats,
+  insertMessages,
+  insertSessions,
+  insertUsers,
+  truncateChats,
+  truncateUsers,
+} from "../../utils";
 
 describe("ChatService", () => {
-  const pool = new Pool({
-    host: testConfig.TEST_POSTGRES_HOST,
-    port: NumberUtils.safeParseInt(testConfig.TEST_POSTGRES_PORT, 5432),
-    user: testConfig.TEST_POSTGRES_USER,
-    password: testConfig.TEST_POSTGRES_PASSWORD,
-    database: testConfig.TEST_POSTGRES_DB,
-  });
+  const pool = createTestPool();
   const dataContext = new DataContext(pool);
   const chatRepository = new ChatRepository(dataContext);
   const messageRepository = new MessageRepository(dataContext);
@@ -40,322 +42,361 @@ describe("ChatService", () => {
     new AssistantService()
   );
 
-  const user1Id = randomUUID();
-  const user2Id = randomUUID();
+  const users: User[] = [
+    {
+      id: randomUUID(),
+      name: "user 1",
+      email: "user1@example.com",
+      password: "password",
+      createdAt: addDays(new Date(), -15),
+    },
+    {
+      id: randomUUID(),
+      name: "user 2",
+      email: "user2@example.com",
+      password: "password",
+      createdAt: addDays(new Date(), -19),
+    },
+  ];
+  const sessions: Session[] = [
+    {
+      id: randomUUID(),
+      userId: users[0].id,
+      createdAt: addDays(new Date(), -12),
+    },
+    {
+      id: randomUUID(),
+      userId: users[1].id,
+      createdAt: addDays(new Date(), -9),
+    },
+  ];
   const chats: Chat[] = [
     {
       id: randomUUID(),
-      userId: user1Id,
-      title: "New Chat",
-      createdAt: addDays(new Date(), -2),
+      title: "user 1 chat 1",
+      userId: users[0].id,
+      createdAt: addDays(new Date(), -12),
     },
     {
       id: randomUUID(),
-      userId: user1Id,
-      title: "Space Joke",
-      createdAt: addDays(new Date(), -4),
-    },
-    {
-      id: randomUUID(),
-      userId: user2Id,
-      title: "New Chat",
-      createdAt: addDays(new Date(), -8),
-    },
-    {
-      id: randomUUID(),
-      userId: user2Id,
-      title: "Weather Joke",
+      title: "user 1 chat 2",
+      userId: users[0].id,
       createdAt: addDays(new Date(), -10),
+    },
+    {
+      id: randomUUID(),
+      title: "uset 2 chat 1",
+      userId: users[1].id,
+      createdAt: addDays(new Date(), -15),
+    },
+    {
+      id: randomUUID(),
+      title: "user 2 chat 2",
+      userId: users[1].id,
+      createdAt: addDays(new Date(), -9),
     },
   ];
   const messages: Message[] = [
     {
       id: randomUUID(),
       role: "user",
-      content: "Hi",
+      content: "message",
       chatId: chats[0].id,
-      createdAt: addDays(new Date(), -2),
+      createdAt: addDays(new Date(), -12),
     },
     {
       id: randomUUID(),
       role: "assistant",
-      content: "Hello! How can i help you today?",
+      content: "message",
       chatId: chats[0].id,
-      createdAt: addDays(new Date(), -2),
+      createdAt: addDays(new Date(), -12),
     },
     {
       id: randomUUID(),
       role: "user",
-      content: "Can you tell me a joke about space?",
+      content: "message",
       chatId: chats[1].id,
-      createdAt: addDays(new Date(), -4),
-    },
-    {
-      id: randomUUID(),
-      role: "assistant",
-      content:
-        "Why don’t astronauts get hungry after being blasted into space? Because they’ve just had a big launch.",
-      chatId: chats[1].id,
-      createdAt: addDays(new Date(), -4),
-    },
-    {
-      id: randomUUID(),
-      role: "user",
-      content: "Hello!",
-      chatId: chats[2].id,
-      createdAt: addDays(new Date(), -8),
-    },
-    {
-      id: randomUUID(),
-      role: "assistant",
-      content: "Hello there! How can i help you today?",
-      chatId: chats[2].id,
-      createdAt: addDays(new Date(), -8),
-    },
-    {
-      id: randomUUID(),
-      role: "user",
-      content: "Can you tell me a joke about the weather?",
-      chatId: chats[3].id,
       createdAt: addDays(new Date(), -10),
     },
     {
       id: randomUUID(),
       role: "assistant",
-      content:
-        "Why did the tornado break up with the hurricane? Because it needed some space… and a little less drama.",
-      chatId: chats[3].id,
+      content: "message",
+      chatId: chats[1].id,
       createdAt: addDays(new Date(), -10),
+    },
+    {
+      id: randomUUID(),
+      role: "user",
+      content: "message",
+      chatId: chats[2].id,
+      createdAt: addDays(new Date(), -15),
+    },
+    {
+      id: randomUUID(),
+      role: "assistant",
+      content: "message",
+      chatId: chats[2].id,
+      createdAt: addDays(new Date(), -15),
+    },
+    {
+      id: randomUUID(),
+      role: "user",
+      content: "message",
+      chatId: chats[3].id,
+      createdAt: addDays(new Date(), -9),
+    },
+    {
+      id: randomUUID(),
+      role: "assistant",
+      content: "message",
+      chatId: chats[3].id,
+      createdAt: addDays(new Date(), -9),
     },
   ];
 
   beforeAll(async () => {
-    await pool.query(
-      `INSERT INTO "user"
-      (id, name, email, password)
-      VALUES
-      ($1, 'John Doe', 'john_doe@example.com', 'password'),
-      ($2, 'Jane Doe', 'jane_doe@example.com', 'password');`,
-      [user1Id, user2Id]
-    );
+    await insertUsers(users, pool);
+    await insertSessions(sessions, pool);
   });
 
   beforeEach(async () => {
-    await pool.query(
-      `INSERT INTO "chat"
-      (id, title, user_id, created_at)
-      VALUES
-      ${SqlUtils.values(chats.length, 4)};`,
-      chats.flatMap((chat) => [
-        chat.id,
-        chat.title,
-        chat.userId,
-        chat.createdAt,
-      ])
-    );
-
-    await pool.query(
-      `INSERT INTO "message"
-      (id, role, content, chat_id, created_at)
-      VALUES
-      ${SqlUtils.values(messages.length, 5)};`,
-      messages.flatMap((message) => [
-        message.id,
-        message.role,
-        message.content,
-        message.chatId,
-        message.createdAt,
-      ])
-    );
+    await insertChats(chats, pool);
+    await insertMessages(messages, pool);
   });
 
   afterEach(async () => {
-    await pool.query(`TRUNCATE "chat" CASCADE;`);
+    await truncateChats(pool);
   });
 
   afterAll(async () => {
-    await pool.query(`TRUNCATE "user" CASCADE;`);
+    await truncateUsers(pool);
     await pool.end();
   });
 
   describe("getChats", () => {
-    it("should return all user chats ordered by creation date desc", async () => {
+    it("should return user chats ordered by creation date desc paginated", async () => {
+      const user = users[0];
       const authContext: AuthContext = {
-        session: { id: randomUUID(), userId: user1Id },
-        user: { id: user1Id, name: "John Doe", email: "john_doe@example.com" },
+        session: sessions[0],
+        user: mapUserToDto(user),
       };
 
-      const result = await chatService.getChats(authContext);
+      const page = 1;
+      const pageSize = 10;
+      const query: GetChatsQuery = {
+        page: page.toString(),
+        pageSize: pageSize.toString(),
+      };
 
-      const expectedChats = chats
-        .filter((chat) => chat.userId === user1Id)
-        .map((chat) => expect.objectContaining(chat));
+      const response = await chatService.getChats(query, authContext);
 
-      expect(result.chats).toEqual(expectedChats);
+      const sortedChats = chats
+        .filter((chat) => chat.userId === user.id)
+        .sort(
+          (chatA, chatB) =>
+            (chatB.createdAt?.getTime() ?? 0) -
+            (chatA.createdAt?.getTime() ?? 0)
+        );
+
+      expect(response).toEqual({
+        chats: {
+          items: sortedChats
+            .slice((page - 1) * pageSize, page * pageSize)
+            .map((chat) => expect.objectContaining(chat)),
+          totalItems: sortedChats.length,
+          page,
+          pageSize,
+          totalPages: Math.ceil(sortedChats.length / pageSize),
+        },
+      });
     });
   });
 
   describe("getChatMessages", () => {
-    it("should return all chat messages ordered by creation date asc", async () => {
+    it("should return chat messages ordered by creation date asc", async () => {
+      const user = users[0];
       const authContext: AuthContext = {
-        session: { id: randomUUID(), userId: user1Id },
-        user: { id: user2Id, name: "Jane Doe", email: "jane_doe@example.com" },
+        session: sessions[0],
+        user: mapUserToDto(user),
       };
 
-      const params: GetChatMessagesParams = { chatId: chats[3].id };
+      const chat = chats[0];
+      const params: GetChatMessagesParams = { chatId: chat.id };
 
-      const result = await chatService.getChatMessages(params, authContext);
+      const response = await chatService.getChatMessages(params, authContext);
 
-      const expectedMessages = messages
-        .filter((message) => message.chatId === chats[3].id)
-        .map((message) => expect.objectContaining(message));
-
-      expect(result.messages).toEqual(expectedMessages);
+      expect(response).toEqual({
+        messages: messages
+          .filter((message) => message.chatId === chat.id)
+          .sort(
+            (messageA, messageB) =>
+              (messageA.createdAt?.getTime() ?? 0) -
+              (messageB.createdAt?.getTime() ?? 0)
+          )
+          .map((message) => expect.objectContaining(message)),
+      });
     });
   });
 
   describe("createChat", () => {
     it("should create a new chat with user and assistant messages", async () => {
+      const user = users[1];
       const authContext: AuthContext = {
-        session: { id: randomUUID(), userId: user1Id },
-        user: { id: user1Id, name: "John Doe", email: "john_doe@example.com" },
+        session: sessions[1],
+        user: mapUserToDto(user),
       };
 
       const request: CreateChatRequest = {
         id: randomUUID(),
-        message: "Can you tell me a joke about space?",
+        message: "message",
       };
 
-      await chatService.createChat(request, authContext, () => {});
+      let assistantMessageId = "";
+      let assistantMessageContent = "";
+
+      await chatService.createChat(request, authContext, (event) => {
+        if (event.event === "start") {
+          assistantMessageId = event.data.messageId;
+        } else if (event.event === "delta") {
+          assistantMessageContent += event.data.delta;
+        }
+      });
 
       const databaseChat = await chatRepository.findOne({ id: request.id });
-      const databaseMessages = await messageRepository.findAll({
-        chatId: request.id,
-      });
 
       if (databaseChat == null) {
         fail("Expected chat to be created");
       }
 
-      const expectedDatabaseMessages = expect.arrayContaining([
-        expect.objectContaining({
-          role: "user",
-          content: request.message,
-          chatId: request.id,
-        }),
-        expect.objectContaining({
-          role: "assistant",
-          content: expect.any(String),
-          chatId: request.id,
-        }),
-      ]);
+      const databaseMessages = await messageRepository.findAll({
+        chatId: request.id,
+      });
 
       expect(databaseChat).toEqual(
-        expect.objectContaining({ id: request.id, userId: authContext.user.id })
+        expect.objectContaining({ id: request.id, userId: user.id })
       );
-      expect(databaseMessages).toEqual(expectedDatabaseMessages);
+      expect(databaseMessages).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            role: "user",
+            content: request.message,
+            chatId: request.id,
+          }),
+          expect.objectContaining({
+            id: assistantMessageId,
+            role: "assistant",
+            content: assistantMessageContent,
+            chatId: request.id,
+          }),
+        ])
+      );
     });
   });
 
   describe("sendMessage", () => {
     it("should add a new user message and assistant response to chat", async () => {
+      const user = users[0];
       const authContext: AuthContext = {
-        session: { id: randomUUID(), userId: user1Id },
-        user: { id: user1Id, name: "John Doe", email: "john_doe@example.com" },
+        session: sessions[0],
+        user: mapUserToDto(user),
       };
 
       const params: SendMessageParams = { chatId: chats[0].id };
-
       const request: SendMessageRequest = {
         id: randomUUID(),
-        content: "Can you tell me a joke about space?",
+        content: "message",
       };
 
-      await chatService.sendMessage(params, request, authContext, () => {});
+      let assistantMessageId = "";
+      let assistantMessageContent = "";
+
+      await chatService.sendMessage(params, request, authContext, (event) => {
+        if (event.event === "start") {
+          assistantMessageId = event.data.messageId;
+        } else if (event.event === "delta") {
+          assistantMessageContent += event.data.delta;
+        }
+      });
 
       const databaseChat = await chatRepository.findOne({ id: params.chatId });
-      const databaseMessages = await messageRepository.findAll({
-        chatId: params.chatId,
-      });
 
       if (databaseChat == null) {
         fail("Expected chat to be found");
       }
 
-      const expectedMessages = expect.arrayContaining([
-        ...messages
-          .filter((message) => message.chatId === params.chatId)
-          .map((message) => expect.objectContaining(message)),
-        expect.objectContaining({
-          role: "user",
-          content: request.content,
-          chatId: params.chatId,
-        }),
-        expect.objectContaining({
-          role: "assistant",
-          content: expect.any(String),
-          chatId: params.chatId,
-        }),
-      ]);
+      const databaseMessages = await messageRepository.findAll({
+        chatId: params.chatId,
+      });
 
       expect(databaseChat).toEqual(
-        expect.objectContaining({
-          id: params.chatId,
-          userId: authContext.user.id,
-        })
+        expect.objectContaining({ id: params.chatId, userId: user.id })
       );
-      expect(databaseMessages).toEqual(expectedMessages);
+      expect(databaseMessages).toEqual(
+        expect.arrayContaining([
+          ...messages
+            .filter((message) => message.chatId === params.chatId)
+            .map((message) => expect.objectContaining(message)),
+          expect.objectContaining({
+            id: request.id,
+            role: "user",
+            content: request.content,
+            chatId: params.chatId,
+          }),
+          expect.objectContaining({
+            id: assistantMessageId,
+            role: "assistant",
+            content: assistantMessageContent,
+            chatId: params.chatId,
+          }),
+        ])
+      );
     });
   });
 
-  describe("renameChat", () => {
-    it("should rename chat", async () => {
+  describe("updateChat", () => {
+    it("should update chat title", async () => {
+      const user = users[0];
+      const chat = chats[1];
       const authContext: AuthContext = {
-        session: { id: randomUUID(), userId: user1Id },
-        user: { id: user1Id, name: "John Doe", email: "john_doe@example.com" },
+        session: sessions[0],
+        user: mapUserToDto(user),
       };
 
-      const params: RenameChatParams = { chatId: chats[0].id };
-      const request: RenameChatRequest = { title: "Updated Chat Title" };
+      const params: UpdateChatParams = { chatId: chat.id };
+      const request: UpdateChatRequest = { title: "Updated Chat Title" };
 
-      const result = await chatService.renameChat(params, request, authContext);
-
-      const databaseChats = await chatRepository.findAll();
-
-      const expectedChats = expect.arrayContaining(
-        chats.map((chat) =>
-          chat.id === params.chatId
-            ? expect.objectContaining({ ...chat, title: request.title })
-            : expect.objectContaining(chat)
-        )
+      const response = await chatService.updateChat(
+        params,
+        request,
+        authContext
       );
 
-      expect(result.chatId).toBe(params.chatId);
-      expect(databaseChats).toEqual(expectedChats);
+      const databaseChat = await chatRepository.findOne({ id: params.chatId });
+
+      expect(databaseChat).toEqual(
+        expect.objectContaining({ ...chat, title: request.title })
+      );
+      expect(response).toEqual({ chatId: params.chatId });
     });
   });
 
   describe("deleteChat", () => {
     it("should delete chat", async () => {
+      const user = users[0];
       const authContext: AuthContext = {
-        session: { id: randomUUID(), userId: user1Id },
-        user: { id: user1Id, name: "John Doe", email: "john_doe@example.com" },
+        session: sessions[0],
+        user: mapUserToDto(user),
       };
 
-      const params: DeleteChatParams = { chatId: chats[0].id };
+      const params: DeleteChatParams = { chatId: chats[1].id };
 
-      const result = await chatService.deleteChat(params, authContext);
+      const response = await chatService.deleteChat(params, authContext);
 
-      const databaseChats = await chatRepository.findAll();
+      const databaseChat = await chatRepository.findOne({ id: params.chatId });
 
-      const expectedChats = expect.arrayContaining(
-        chats
-          .filter((chat) => chat.id !== params.chatId)
-          .map((chat) => expect.objectContaining(chat))
-      );
-
-      expect(result.chatId).toBe(params.chatId);
-      expect(databaseChats).toEqual(expectedChats);
+      expect(databaseChat).toBeNull();
+      expect(response).toEqual({ chatId: params.chatId });
     });
   });
 });

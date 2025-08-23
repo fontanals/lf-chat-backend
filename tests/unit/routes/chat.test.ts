@@ -1,3 +1,4 @@
+import { randomUUID } from "crypto";
 import { Request, Response } from "express";
 import { Chat } from "../../../src/models/entities/chat";
 import { Message } from "../../../src/models/entities/message";
@@ -7,11 +8,12 @@ import {
   deleteChat,
   getChatMessages,
   getChats,
-  renameChat,
   sendMessage,
+  updateChat,
 } from "../../../src/routes/chat";
 import { IServiceProvider } from "../../../src/service-provider";
 import { IChatService } from "../../../src/services/chat";
+import { Paginated } from "../../../src/utils/types";
 
 describe("Chat Routes", () => {
   let request: jest.Mocked<Request>;
@@ -31,7 +33,7 @@ describe("Chat Routes", () => {
       getChatMessages: jest.fn(),
       createChat: jest.fn(),
       sendMessage: jest.fn(),
-      renameChat: jest.fn(),
+      updateChat: jest.fn(),
       deleteChat: jest.fn(),
     };
 
@@ -42,19 +44,26 @@ describe("Chat Routes", () => {
     it("should return chats", async () => {
       services.get.mockReturnValue(chatService);
 
-      const chats: Chat[] = [
-        { id: "chat-1", title: "Chat 1", userId: "user-id" },
-        { id: "chat-2", title: "Chat 2", userId: "user-id" },
-        { id: "chat-3", title: "Chat 3", userId: "user-id" },
-        { id: "chat-4", title: "Chat 4", userId: "user-id" },
-        { id: "chat-5", title: "Chat 5", userId: "user-id" },
-      ];
+      const userId = randomUUID();
+      const chats: Paginated<Chat> = {
+        items: [
+          { id: randomUUID(), title: "title", userId },
+          { id: randomUUID(), title: "title", userId },
+          { id: randomUUID(), title: "title", userId },
+          { id: randomUUID(), title: "title", userId },
+          { id: randomUUID(), title: "title", userId },
+        ],
+        totalItems: 5,
+        page: 1,
+        totalPages: 1,
+        pageSize: 10,
+      };
 
       chatService.getChats.mockResolvedValue({ chats });
 
-      const result = await getChats(request, response, services);
+      const getChatsResponse = await getChats(request, response, services);
 
-      expect(result.chats).toEqual(chats);
+      expect(getChatsResponse).toEqual({ chats });
     });
   });
 
@@ -62,43 +71,45 @@ describe("Chat Routes", () => {
     it("should return chat messages", async () => {
       services.get.mockReturnValue(chatService);
 
+      const chatId = randomUUID();
       const messages: Message[] = [
-        { id: "message-1", role: "user", content: "Hello!", chatId: "chat-id" },
-        {
-          id: "message-2",
-          role: "assistant",
-          content: "Hi there! How can I help you today?",
-          chatId: "chat-id",
-        },
+        { id: randomUUID(), role: "user", content: "message", chatId },
+        { id: randomUUID(), role: "assistant", content: "message", chatId },
       ];
 
       chatService.getChatMessages.mockResolvedValue({ messages });
 
-      const result = await getChatMessages(request, response, services);
+      const getChatMessagesResponse = await getChatMessages(
+        request,
+        response,
+        services
+      );
 
-      expect(result.messages).toEqual(messages);
+      expect(getChatMessagesResponse).toEqual({ messages });
     });
   });
 
   describe("createChat", () => {
-    it("should create chat and send answer server sent events", async () => {
+    it("should send answer start, delta and end events", async () => {
       services.get.mockReturnValue(chatService);
+
+      const messageId = randomUUID();
 
       const startEvent: ChatServerSentEvent = {
         event: "start",
-        data: { messageId: "message-1" },
+        data: { messageId },
         isDone: false,
       };
 
       const deltaEvent: ChatServerSentEvent = {
         event: "delta",
-        data: { messageId: "message-1", delta: "Hello!" },
+        data: { messageId, delta: "message" },
         isDone: false,
       };
 
       const endEvent: ChatServerSentEvent = {
         event: "end",
-        data: { messageId: "message-1" },
+        data: { messageId },
         isDone: true,
       };
 
@@ -125,24 +136,26 @@ describe("Chat Routes", () => {
   });
 
   describe("sendMessage", () => {
-    it("should create message and send answer server sent events", async () => {
+    it("should send answer start, delta and end events", async () => {
       services.get.mockReturnValue(chatService);
+
+      const messageId = randomUUID();
 
       const startEvent: ChatServerSentEvent = {
         event: "start",
-        data: { messageId: "message-1" },
+        data: { messageId },
         isDone: false,
       };
 
       const deltaEvent: ChatServerSentEvent = {
         event: "delta",
-        data: { messageId: "message-1", delta: "Hello!" },
+        data: { messageId, delta: "Hello!" },
         isDone: false,
       };
 
       const endEvent: ChatServerSentEvent = {
         event: "end",
-        data: { messageId: "message-1" },
+        data: { messageId },
         isDone: true,
       };
 
@@ -168,27 +181,31 @@ describe("Chat Routes", () => {
     });
   });
 
-  describe("renameChat", () => {
-    it("should rename chat and return its id", async () => {
+  describe("updateChat", () => {
+    it("should return chat id", async () => {
       services.get.mockReturnValue(chatService);
 
-      chatService.renameChat.mockResolvedValue({ chatId: "chat-id" });
+      const chatId = randomUUID();
 
-      const result = await renameChat(request, response, services);
+      chatService.updateChat.mockResolvedValue({ chatId });
 
-      expect(result.chatId).toEqual("chat-id");
+      const updateChatResponse = await updateChat(request, response, services);
+
+      expect(updateChatResponse).toEqual({ chatId });
     });
   });
 
   describe("deleteChat", () => {
-    it("should delete chat and return its id", async () => {
+    it("should return chat id", async () => {
       services.get.mockReturnValue(chatService);
 
-      chatService.deleteChat.mockResolvedValue({ chatId: "chat-id" });
+      const chatId = randomUUID();
 
-      const result = await deleteChat(request, response, services);
+      chatService.deleteChat.mockResolvedValue({ chatId });
 
-      expect(result.chatId).toEqual("chat-id");
+      const deleteChatResponse = await deleteChat(request, response, services);
+
+      expect(deleteChatResponse).toEqual({ chatId });
     });
   });
 });

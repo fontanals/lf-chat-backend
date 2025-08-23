@@ -22,52 +22,61 @@ describe("MessageRepository", () => {
   const users: User[] = [
     {
       id: randomUUID(),
-      name: "User 1",
+      name: "user 1",
       email: "user1@example.com",
       password: "password",
-      createdAt: addDays(new Date(), -50),
+      createdAt: addDays(new Date(), -6),
     },
     {
       id: randomUUID(),
-      name: "User 2",
+      name: "user 2",
       email: "user2@example.com",
       password: "password",
-      createdAt: addDays(new Date(), -102),
+      createdAt: addDays(new Date(), -5),
     },
   ];
   const chats: Chat[] = [
     {
       id: randomUUID(),
-      title: "User 1 Chat",
+      title: "user 1 chat",
       userId: users[0].id,
       createdAt: addDays(new Date(), -1),
     },
     {
       id: randomUUID(),
-      title: "User 2 Chat",
-      userId: users[0].id,
+      title: "user 2 chat",
+      userId: users[1].id,
       createdAt: addDays(new Date(), -2),
     },
   ];
   const messages: Message[] = [
-    { id: randomUUID(), role: "user", content: "Hello", chatId: chats[0].id },
+    {
+      id: randomUUID(),
+      role: "user",
+      content: "message",
+      chatId: chats[0].id,
+      createdAt: addDays(new Date(), -1),
+    },
     {
       id: randomUUID(),
       role: "assistant",
-      content: "Hi there! How can I help you today?",
+      content: "message",
       chatId: chats[0].id,
+      createdAt: addDays(new Date(), -1),
     },
     {
       id: randomUUID(),
       role: "user",
-      content: "How are you?",
+      content: "message",
       chatId: chats[1].id,
+      createdAt: addDays(new Date(), -2),
     },
     {
       id: randomUUID(),
       role: "assistant",
-      content: "I'm very well, thank you! How can I help you today?",
+      content: "message",
       chatId: chats[1].id,
+      createdAt: addDays(new Date(), -2),
     },
   ];
 
@@ -93,32 +102,32 @@ describe("MessageRepository", () => {
     it("should return all messages ordered by creation date asc", async () => {
       const databaseMessages = await messageRepository.findAll();
 
-      const expectedMessages = messages
-        .sort(
-          (messageA, messageB) =>
-            (messageA.createdAt?.getTime() ?? 0) -
-            (messageB.createdAt?.getTime() ?? 0)
-        )
-        .map((message) => expect.objectContaining(message));
-
-      expect(databaseMessages).toEqual(expectedMessages);
+      expect(databaseMessages).toEqual(
+        messages
+          .sort(
+            (messageA, messageB) =>
+              (messageA.createdAt?.getTime() ?? 0) -
+              (messageB.createdAt?.getTime() ?? 0)
+          )
+          .map((message) => expect.objectContaining(message))
+      );
     });
 
-    it("should return all chat messages ordered by creation date asc", async () => {
+    it("should return chat messages ordered by creation date asc", async () => {
       const chatId = chats[0].id;
 
       const databaseMessages = await messageRepository.findAll({ chatId });
 
-      const expectedMessages = messages
-        .filter((message) => message.chatId === chatId)
-        .sort(
-          (messageA, messageB) =>
-            (messageA.createdAt?.getTime() ?? 0) -
-            (messageB.createdAt?.getTime() ?? 0)
-        )
-        .map((message) => expect.objectContaining(message));
-
-      expect(databaseMessages).toEqual(expectedMessages);
+      expect(databaseMessages).toEqual(
+        messages
+          .filter((message) => message.chatId === chatId)
+          .sort(
+            (messageA, messageB) =>
+              (messageA.createdAt?.getTime() ?? 0) -
+              (messageB.createdAt?.getTime() ?? 0)
+          )
+          .map((message) => expect.objectContaining(message))
+      );
     });
   });
 
@@ -137,13 +146,13 @@ describe("MessageRepository", () => {
 
       const databaseMessages = await messageRepository.findAll();
 
-      const expectedMessages = expect.arrayContaining(
-        [...messages, message].map((message) =>
-          expect.objectContaining(message)
+      expect(databaseMessages).toEqual(
+        expect.arrayContaining(
+          [...messages, message].map((message) =>
+            expect.objectContaining(message)
+          )
         )
       );
-
-      expect(databaseMessages).toEqual(expectedMessages);
     });
   });
 });

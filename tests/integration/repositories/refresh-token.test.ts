@@ -22,17 +22,17 @@ describe("RefreshTokenRepository", () => {
   const users: User[] = [
     {
       id: randomUUID(),
-      name: "User 1",
+      name: "user 1",
       email: "user1@example.com",
       password: "password",
-      createdAt: addDays(new Date(), -50),
+      createdAt: addDays(new Date(), -15),
     },
     {
       id: randomUUID(),
-      name: "User 2",
+      name: "user 2",
       email: "user2@example.com",
       password: "password",
-      createdAt: addDays(new Date(), -102),
+      createdAt: addDays(new Date(), -18),
     },
   ];
   const sessions: Session[] = [
@@ -50,7 +50,7 @@ describe("RefreshTokenRepository", () => {
   const refreshTokens: RefreshToken[] = [
     {
       id: randomUUID(),
-      token: "refresh-token-1",
+      token: "refresh token 1",
       expiresAt: addDays(new Date(), 2),
       isRevoked: false,
       sessionId: sessions[0].id,
@@ -58,7 +58,7 @@ describe("RefreshTokenRepository", () => {
     },
     {
       id: randomUUID(),
-      token: "refresh-token-2",
+      token: "refresh token 2",
       expiresAt: addDays(new Date(), 4),
       isRevoked: true,
       sessionId: sessions[1].id,
@@ -66,7 +66,7 @@ describe("RefreshTokenRepository", () => {
     },
     {
       id: randomUUID(),
-      token: "refresh-token-3",
+      token: "refresh token 3",
       expiresAt: addDays(new Date(), 6),
       isRevoked: false,
       sessionId: sessions[1].id,
@@ -96,13 +96,13 @@ describe("RefreshTokenRepository", () => {
     it("should return all refresh tokens", async () => {
       const databaseRefreshTokens = await refreshTokenRepository.findAll();
 
-      const expectedRefreshTokens = expect.arrayContaining(
-        refreshTokens.map((refreshToken) =>
-          expect.objectContaining(refreshToken)
+      expect(databaseRefreshTokens).toEqual(
+        expect.arrayContaining(
+          refreshTokens.map((refreshToken) =>
+            expect.objectContaining(refreshToken)
+          )
         )
       );
-
-      expect(databaseRefreshTokens).toEqual(expectedRefreshTokens);
     });
   });
 
@@ -124,9 +124,9 @@ describe("RefreshTokenRepository", () => {
         token: refreshToken.token,
       });
 
-      const expectedRefreshToken = expect.objectContaining(refreshToken);
-
-      expect(databaseRefreshToken).toEqual(expectedRefreshToken);
+      expect(databaseRefreshToken).toEqual(
+        expect.objectContaining(refreshToken)
+      );
     });
   });
 
@@ -146,13 +146,13 @@ describe("RefreshTokenRepository", () => {
 
       const databaseRefreshTokens = await refreshTokenRepository.findAll();
 
-      const expectedRefreshTokens = expect.arrayContaining(
-        [...refreshTokens, refreshToken].map((refreshToken) =>
-          expect.objectContaining(refreshToken)
+      expect(databaseRefreshTokens).toEqual(
+        expect.arrayContaining(
+          [...refreshTokens, refreshToken].map((refreshToken) =>
+            expect.objectContaining(refreshToken)
+          )
         )
       );
-
-      expect(databaseRefreshTokens).toEqual(expectedRefreshTokens);
     });
   });
 
@@ -164,15 +164,15 @@ describe("RefreshTokenRepository", () => {
 
       const databaseRefreshTokens = await refreshTokenRepository.findAll();
 
-      const expectedRefreshTokens = expect.arrayContaining(
-        refreshTokens.map((refreshToken) =>
-          refreshToken.id === refreshTokenId
-            ? expect.objectContaining({ ...refreshToken, isRevoked: true })
-            : expect.objectContaining(refreshToken)
+      expect(databaseRefreshTokens).toEqual(
+        expect.arrayContaining(
+          refreshTokens.map((refreshToken) =>
+            refreshToken.id === refreshTokenId
+              ? expect.objectContaining({ ...refreshToken, isRevoked: true })
+              : expect.objectContaining(refreshToken)
+          )
         )
       );
-
-      expect(databaseRefreshTokens).toEqual(expectedRefreshTokens);
     });
   });
 
@@ -184,15 +184,15 @@ describe("RefreshTokenRepository", () => {
 
       const databaseRefreshTokens = await refreshTokenRepository.findAll();
 
-      const expectedRefreshTokens = expect.arrayContaining(
-        refreshTokens.map((refreshToken) =>
-          refreshToken.sessionId === sessionId
-            ? expect.objectContaining({ ...refreshToken, isRevoked: true })
-            : expect.objectContaining(refreshToken)
+      expect(databaseRefreshTokens).toEqual(
+        expect.arrayContaining(
+          refreshTokens.map((refreshToken) =>
+            refreshToken.sessionId === sessionId
+              ? expect.objectContaining({ ...refreshToken, isRevoked: true })
+              : expect.objectContaining(refreshToken)
+          )
         )
       );
-
-      expect(databaseRefreshTokens).toEqual(expectedRefreshTokens);
     });
   });
 });

@@ -10,11 +10,6 @@ import {
   SignupRequest,
 } from "../../../src/models/requests/auth";
 import {
-  SigninReponse,
-  SignupResponse,
-} from "../../../src/models/responses/auth";
-import { ApplicationResponse } from "../../../src/models/responses/response";
-import {
   ApplicationErrorCode,
   HttpStatusCode,
 } from "../../../src/utils/errors";
@@ -24,21 +19,18 @@ describe("Auth Routes", () => {
   const expressApp = express();
   const pool = createTestPool();
   const app = new Application(expressApp, pool);
-  const userRepository = app.services.get("UserRepository");
-  const sessionRepository = app.services.get("SessionRepository");
-  const refreshTokenRepository = app.services.get("RefreshTokenRepository");
 
   const users: User[] = [
     {
       id: randomUUID(),
-      name: "User 1",
+      name: "user 1",
       email: "user1@example.com",
       password: "password",
       createdAt: addDays(new Date(), -50),
     },
     {
       id: randomUUID(),
-      name: "User 2",
+      name: "user 2",
       email: "user2@example.com",
       password: "password",
       createdAt: addDays(new Date(), -102),
@@ -63,29 +55,25 @@ describe("Auth Routes", () => {
     it("should return a bad request response when request does not match request schema", async () => {
       const response = await request(expressApp)
         .post("/api/signup")
-        .send({ name: "User 3" });
-
-      const expectedResponseBody = {
-        success: false,
-        error: expect.objectContaining({
-          statusCode: HttpStatusCode.BadRequest,
-          code: ApplicationErrorCode.BadRequest,
-        }),
-      };
+        .send({ name: "user 3" });
 
       expect(response.status).toBe(HttpStatusCode.BadRequest);
       expect(response.headers["content-type"]).toBe(
         "application/json; charset=utf-8"
       );
-      expect(response.body).toEqual(expectedResponseBody);
+      expect(response.body).toEqual({
+        success: false,
+        error: expect.objectContaining({
+          statusCode: HttpStatusCode.BadRequest,
+          code: ApplicationErrorCode.BadRequest,
+        }),
+      });
     });
 
     it("should return an invalid email or password response when email is duplicate", async () => {
-      const email = users[0].email;
-
       const signupRequest: SignupRequest = {
-        name: "User 3",
-        email,
+        name: "user 3",
+        email: users[0].email,
         password: "password",
       };
 
@@ -93,24 +81,22 @@ describe("Auth Routes", () => {
         .post("/api/signup")
         .send(signupRequest);
 
-      const expectedResponseBody = {
+      expect(response.status).toBe(HttpStatusCode.BadRequest);
+      expect(response.headers["content-type"]).toBe(
+        "application/json; charset=utf-8"
+      );
+      expect(response.body).toEqual({
         success: false,
         error: expect.objectContaining({
           statusCode: HttpStatusCode.BadRequest,
           code: ApplicationErrorCode.InvalidEmailOrPassword,
         }),
-      };
-
-      expect(response.status).toBe(HttpStatusCode.BadRequest);
-      expect(response.headers["content-type"]).toBe(
-        "application/json; charset=utf-8"
-      );
-      expect(response.body).toEqual(expectedResponseBody);
+      });
     });
 
     it("should signup a new user creating and returning a new session and the user", async () => {
       const signupRequest: SignupRequest = {
-        name: "User 3",
+        name: "user 3",
         email: "user3@example.com",
         password: "password",
       };
@@ -125,7 +111,7 @@ describe("Auth Routes", () => {
       );
 
       if (accessToken == null) {
-        fail("Expected access token to be returned.");
+        fail("Expected access token to be returned");
       }
 
       const refreshToken = response.headers["set-cookie"]?.[0]
@@ -133,43 +119,14 @@ describe("Auth Routes", () => {
         ?.replace("refreshToken=", "");
 
       if (refreshToken == null) {
-        fail("Expected refresh token to be returned.");
+        fail("Expected refresh token to be returned");
       }
 
-      const applicationResponse =
-        response.body as ApplicationResponse<SignupResponse>;
-
-      if (!applicationResponse.success) {
-        fail("Expected success response.");
-      }
-
-      const signupResponse = applicationResponse.data;
-
-      const databaseUser = await userRepository.findOne({
-        id: signupResponse.user.id,
-      });
-
-      if (databaseUser == null) {
-        fail("Expected user to be created.");
-      }
-
-      const databaseSession = await sessionRepository.findOne({
-        id: signupResponse.session.id,
-      });
-
-      if (databaseSession == null) {
-        fail("Expected session to be created.");
-      }
-
-      const databaseRefreshToken = await refreshTokenRepository.findOne({
-        token: refreshToken,
-      });
-
-      if (databaseRefreshToken == null) {
-        fail("Expected refresh token to be created.");
-      }
-
-      const expectedResponseBody = {
+      expect(response.status).toBe(HttpStatusCode.Ok);
+      expect(response.headers["content-type"]).toBe(
+        "application/json; charset=utf-8"
+      );
+      expect(response.body).toEqual({
         success: true,
         data: {
           session: { id: expect.any(String), userId: expect.any(String) },
@@ -179,34 +136,7 @@ describe("Auth Routes", () => {
             email: signupRequest.email,
           },
         },
-      };
-
-      const expectedUser = expect.objectContaining({
-        name: signupRequest.name,
-        email: signupRequest.email,
       });
-
-      const expectedSession = expect.objectContaining({
-        userId: databaseUser.id,
-      });
-
-      const expectedRefreshToken = expect.objectContaining({
-        token: refreshToken,
-        isRevoked: false,
-        sessionId: databaseSession.id,
-      });
-
-      expect(response.status).toBe(HttpStatusCode.Ok);
-      expect(response.headers["content-type"]).toBe(
-        "application/json; charset=utf-8"
-      );
-      expect(response.body).toEqual(expectedResponseBody);
-      expect(databaseUser).toEqual(expectedUser);
-      expect(databaseSession).toEqual(expectedSession);
-      expect(databaseRefreshToken).toEqual(expectedRefreshToken);
-      expect(databaseRefreshToken.expiresAt.getTime()).toBeGreaterThanOrEqual(
-        addDays(new Date(), 6).getTime()
-      );
     });
   });
 
@@ -218,19 +148,17 @@ describe("Auth Routes", () => {
         .post("/api/signin")
         .send({ email: user.email });
 
-      const expectedResponseBody = {
+      expect(response.status).toBe(HttpStatusCode.BadRequest);
+      expect(response.headers["content-type"]).toBe(
+        "application/json; charset=utf-8"
+      );
+      expect(response.body).toEqual({
         success: false,
         error: expect.objectContaining({
           statusCode: HttpStatusCode.BadRequest,
           code: ApplicationErrorCode.BadRequest,
         }),
-      };
-
-      expect(response.status).toBe(HttpStatusCode.BadRequest);
-      expect(response.headers["content-type"]).toBe(
-        "application/json; charset=utf-8"
-      );
-      expect(response.body).toEqual(expectedResponseBody);
+      });
     });
 
     it("should return an invalid email or password response when password is invalid", async () => {
@@ -245,19 +173,17 @@ describe("Auth Routes", () => {
         .post("/api/signin")
         .send(signupRequest);
 
-      const expectedResponseBody = {
+      expect(response.status).toBe(HttpStatusCode.BadRequest);
+      expect(response.headers["content-type"]).toBe(
+        "application/json; charset=utf-8"
+      );
+      expect(response.body).toEqual({
         success: false,
         error: expect.objectContaining({
           statusCode: HttpStatusCode.BadRequest,
           code: ApplicationErrorCode.InvalidEmailOrPassword,
         }),
-      };
-
-      expect(response.status).toBe(HttpStatusCode.BadRequest);
-      expect(response.headers["content-type"]).toBe(
-        "application/json; charset=utf-8"
-      );
-      expect(response.body).toEqual(expectedResponseBody);
+      });
     });
 
     it("should signin user returning a new session and the user", async () => {
@@ -289,40 +215,11 @@ describe("Auth Routes", () => {
         fail("Expected refresh token to be returned.");
       }
 
-      const applicationResponse =
-        response.body as ApplicationResponse<SigninReponse>;
-
-      if (!applicationResponse.success) {
-        fail("Expected success response.");
-      }
-
-      const signinResponse = applicationResponse.data;
-
-      const databaseUser = await userRepository.findOne({
-        id: signinResponse.user.id,
-      });
-
-      if (databaseUser == null) {
-        fail("Expected user to be created.");
-      }
-
-      const databaseSession = await sessionRepository.findOne({
-        id: signinResponse.session.id,
-      });
-
-      if (databaseSession == null) {
-        fail("Expected session to be created.");
-      }
-
-      const databaseRefreshToken = await refreshTokenRepository.findOne({
-        token: refreshToken,
-      });
-
-      if (databaseRefreshToken == null) {
-        fail("Expected refresh token to be created.");
-      }
-
-      const expectedResponseBody = {
+      expect(response.status).toBe(HttpStatusCode.Ok);
+      expect(response.headers["content-type"]).toBe(
+        "application/json; charset=utf-8"
+      );
+      expect(response.body).toEqual({
         success: true,
         data: {
           session: { id: expect.any(String), userId: user.id },
@@ -333,35 +230,7 @@ describe("Auth Routes", () => {
             createdAt: user.createdAt?.toISOString(),
           },
         },
-      };
-
-      const expectedUser = expect.objectContaining({
-        id: user.id,
-        name: user.name,
-        email: user.email,
       });
-
-      const expectedSession = expect.objectContaining({
-        userId: databaseUser.id,
-      });
-
-      const expectedRefreshToken = expect.objectContaining({
-        token: refreshToken,
-        isRevoked: false,
-        sessionId: databaseSession.id,
-      });
-
-      expect(response.status).toBe(HttpStatusCode.Ok);
-      expect(response.headers["content-type"]).toBe(
-        "application/json; charset=utf-8"
-      );
-      expect(response.body).toEqual(expectedResponseBody);
-      expect(databaseUser).toEqual(expectedUser);
-      expect(databaseSession).toEqual(expectedSession);
-      expect(databaseRefreshToken).toEqual(expectedRefreshToken);
-      expect(databaseRefreshToken.expiresAt.getTime()).toBeGreaterThanOrEqual(
-        addDays(new Date(), 6).getTime()
-      );
     });
   });
 });

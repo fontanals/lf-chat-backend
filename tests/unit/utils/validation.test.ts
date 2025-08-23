@@ -7,7 +7,7 @@ describe("ValidationUtils", () => {
     it("should throw a bad request error when request does not match schema", () => {
       expect(() =>
         ValidationUtils.validateRequest(
-          { firstName: "John" },
+          { firstName: "name" },
           z.object({
             firstName: z.string(),
             lastName: z.string(),
@@ -20,7 +20,7 @@ describe("ValidationUtils", () => {
     it("should not throw when request matches schema", () => {
       expect(() =>
         ValidationUtils.validateRequest(
-          { firstName: "John", lastName: "Doe", age: 30 },
+          { firstName: "name", lastName: "name", age: 30 },
           z.object({
             firstName: z.string(),
             lastName: z.string(),

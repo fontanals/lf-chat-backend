@@ -20,17 +20,17 @@ describe("SessionRepository", () => {
   const users: User[] = [
     {
       id: randomUUID(),
-      name: "User 1",
+      name: "user 1",
       email: "user1@example.com",
       password: "password",
-      createdAt: addDays(new Date(), -50),
+      createdAt: addDays(new Date(), -12),
     },
     {
       id: randomUUID(),
-      name: "User 2",
+      name: "user 2",
       email: "user2@example.com",
       password: "password",
-      createdAt: addDays(new Date(), -102),
+      createdAt: addDays(new Date(), -17),
     },
   ];
   const sessions: Session[] = [
@@ -98,9 +98,7 @@ describe("SessionRepository", () => {
         id: session.id,
       });
 
-      const expectedSession = expect.objectContaining(session);
-
-      expect(databaseSession).toEqual(expectedSession);
+      expect(databaseSession).toEqual(expect.objectContaining(session));
     });
   });
 
@@ -112,13 +110,13 @@ describe("SessionRepository", () => {
 
       const databaseSessions = await sessionRepository.findAll();
 
-      const expectedSessions = expect.arrayContaining(
-        [...sessions, session].map((session) =>
-          expect.objectContaining(session)
+      expect(databaseSessions).toEqual(
+        expect.arrayContaining(
+          [...sessions, session].map((session) =>
+            expect.objectContaining(session)
+          )
         )
       );
-
-      expect(databaseSessions).toEqual(expectedSessions);
     });
   });
 });

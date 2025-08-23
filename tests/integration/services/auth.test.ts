@@ -1,10 +1,12 @@
+import bcrypt from "bcrypt";
 import { randomUUID } from "crypto";
 import { addDays } from "date-fns";
 import jsonwebtoken from "jsonwebtoken";
-import { Pool } from "pg";
 import { config } from "../../../src/config";
 import { DataContext } from "../../../src/data/context";
 import { RefreshToken } from "../../../src/models/entities/refresh-token";
+import { Session } from "../../../src/models/entities/session";
+import { mapUserToDto, User } from "../../../src/models/entities/user";
 import {
   SigninRequest,
   SignupRequest,
@@ -13,18 +15,17 @@ import { RefreshTokenRepository } from "../../../src/repositories/refresh-token"
 import { SessionRepository } from "../../../src/repositories/session";
 import { UserRepository } from "../../../src/repositories/user";
 import { AuthContext, AuthService } from "../../../src/services/auth";
-import { NumberUtils } from "../../../src/utils/numbers";
-import { SqlUtils } from "../../../src/utils/sql";
-import { testConfig } from "../../config";
+import {
+  createTestPool,
+  insertRefreshTokens,
+  insertSessions,
+  insertUsers,
+  truncateSessions,
+  truncateUsers,
+} from "../../utils";
 
 describe("AuthService", () => {
-  const pool = new Pool({
-    host: testConfig.TEST_POSTGRES_HOST,
-    port: NumberUtils.safeParseInt(testConfig.TEST_POSTGRES_PORT, 5432),
-    user: testConfig.TEST_POSTGRES_USER,
-    password: testConfig.TEST_POSTGRES_PASSWORD,
-    database: testConfig.TEST_POSTGRES_DB,
-  });
+  const pool = createTestPool();
   const dataContext = new DataContext(pool);
   const userRepository = new UserRepository(dataContext);
   const sessionRepository = new SessionRepository(dataContext);
@@ -36,29 +37,39 @@ describe("AuthService", () => {
     refreshTokenRepository
   );
 
-  const userId = randomUUID();
-  const session1Id = randomUUID();
-  const session2Id = randomUUID();
-
+  const users: User[] = [
+    {
+      id: randomUUID(),
+      name: "user 1",
+      email: "user1@example.com",
+      password: "password",
+      createdAt: addDays(new Date(), -50),
+    },
+  ];
+  const sessions: Session[] = [
+    {
+      id: randomUUID(),
+      userId: users[0].id,
+      createdAt: addDays(new Date(), -50),
+    },
+  ];
   const authContext: AuthContext = {
-    session: { id: session2Id, userId },
-    user: { id: userId, name: "John Doe", email: "john_doe@example.com" },
+    session: sessions[0],
+    user: mapUserToDto(users[0]),
   };
-
   const generateRefreshToken = (expiresAt: Date) => {
     return jsonwebtoken.sign(
       { ...authContext, exp: Math.floor(expiresAt.getTime() / 1000) },
       config.REFRESH_TOKEN_SECRET
     );
   };
-
   const refreshTokens: RefreshToken[] = [
     {
       id: randomUUID(),
       token: generateRefreshToken(addDays(new Date(), -2)),
       expiresAt: addDays(new Date(), -2),
       isRevoked: true,
-      sessionId: session1Id,
+      sessionId: sessions[0].id,
       createdAt: addDays(new Date(), -9),
     },
     {
@@ -66,7 +77,7 @@ describe("AuthService", () => {
       token: generateRefreshToken(addDays(new Date(), -1)),
       expiresAt: addDays(new Date(), -1),
       isRevoked: false,
-      sessionId: session1Id,
+      sessionId: sessions[0].id,
       createdAt: addDays(new Date(), -8),
     },
     {
@@ -74,108 +85,96 @@ describe("AuthService", () => {
       token: generateRefreshToken(addDays(new Date(), 2)),
       expiresAt: addDays(new Date(), 2),
       isRevoked: false,
-      sessionId: session1Id,
+      sessionId: sessions[0].id,
       createdAt: addDays(new Date(), -4),
-    },
-    {
-      id: randomUUID(),
-      token: generateRefreshToken(addDays(new Date(), -7)),
-      expiresAt: addDays(new Date(), -7),
-      isRevoked: true,
-      sessionId: session2Id,
-      createdAt: addDays(new Date(), -14),
-    },
-    {
-      id: randomUUID(),
-      token: generateRefreshToken(addDays(new Date(), 4)),
-      expiresAt: addDays(new Date(), 4),
-      isRevoked: false,
-      sessionId: session2Id,
-      createdAt: addDays(new Date(), -2),
     },
   ];
 
   beforeAll(async () => {
-    await pool.query(
-      `INSERT INTO "user"
-      (id, name, email, password)
-      VALUES
-      ($1, 'John Doe', 'john_doe@example.com', 'password');`,
-      [userId]
+    const hashedPassword = await bcrypt.hash("password", 10);
+
+    await insertUsers(
+      users.map((user) => ({ ...user, password: hashedPassword })),
+      pool
     );
   });
 
   beforeEach(async () => {
-    await pool.query(
-      `INSERT INTO "session"
-      (id, user_id)
-      VALUES
-      ($1, $3),
-      ($2, $3);`,
-      [session1Id, session2Id, userId]
-    );
-
-    await pool.query(
-      `INSERT INTO "refresh_token"
-      (id, token, expires_at, is_revoked, session_id, created_at)
-      VALUES
-      ${SqlUtils.values(refreshTokens.length, 6)};`,
-      refreshTokens.flatMap((refreshToken) => [
-        refreshToken.id,
-        refreshToken.token,
-        refreshToken.expiresAt,
-        refreshToken.isRevoked,
-        refreshToken.sessionId,
-        refreshToken.createdAt,
-      ])
-    );
+    await insertSessions(sessions, pool);
+    await insertRefreshTokens(refreshTokens, pool);
   });
 
   afterEach(async () => {
-    await pool.query(`TRUNCATE "session" CASCADE;`);
+    await truncateSessions(pool);
   });
 
   afterAll(async () => {
-    await pool.query(`TRUNCATE "user" CASCADE;`);
+    await truncateUsers(pool);
     await pool.end();
   });
 
   describe("signup", () => {
     it("should signup a new user creating a user, session, and refresh token", async () => {
       const request: SignupRequest = {
-        name: "Jane Doe",
-        email: "jane_doe@example.com",
+        name: "User 2",
+        email: "user2@example.com",
         password: "password",
       };
 
-      const { response } = await authService.signup(request);
+      const { refreshToken, response } = await authService.signup(request);
 
-      const user = await userRepository.findOne({ email: request.email });
-      const session = await sessionRepository.findOne({
-        id: response.session.id,
+      const databaseUser = await userRepository.findOne({
+        id: response.user.id,
       });
 
-      if (user == null) {
+      if (databaseUser == null) {
         fail("Expected user to be created.");
       }
 
-      if (session == null) {
+      const databaseSession = await sessionRepository.findOne({
+        id: response.session.id,
+      });
+
+      if (databaseSession == null) {
         fail("Expected session to be created.");
       }
 
-      expect(user).toEqual(
+      const databaseRefreshToken = await refreshTokenRepository.findOne({
+        token: refreshToken,
+      });
+
+      if (databaseRefreshToken == null) {
+        fail("Expected refresh token to be created.");
+      }
+
+      expect(databaseUser).toEqual(
         expect.objectContaining({
-          name: "Jane Doe",
-          email: "jane_doe@example.com",
+          id: response.user.id,
+          name: response.user.name,
+          email: response.user.email,
         })
       );
-      expect(session).toEqual(expect.objectContaining({ userId: user.id }));
+      expect(databaseSession).toEqual(
+        expect.objectContaining({
+          id: response.session.id,
+          userId: response.session.userId,
+        })
+      );
+      expect(databaseRefreshToken).toEqual(
+        expect.objectContaining({
+          sessionId: response.session.id,
+          isRevoked: false,
+        })
+      );
+      expect(databaseRefreshToken.expiresAt.getTime()).toBeGreaterThanOrEqual(
+        addDays(new Date(), 6).getTime()
+      );
       expect(response).toEqual({
-        session: { id: session.id, userId: user.id },
+        session: { id: databaseSession.id, userId: databaseUser.id },
         user: {
-          id: user.id,
-          name: "Jane Doe",
-          email: "jane_doe@example.com",
+          id: databaseUser.id,
+          name: request.name,
+          email: request.email,
         },
       });
     });
@@ -183,40 +182,68 @@ describe("AuthService", () => {
 
   describe("signin", () => {
     it("should signin a user creating a session and refresh token", async () => {
+      const user = users[0];
+
       const request: SigninRequest = {
-        email: "jane_doe@example.com",
-        password: "password",
+        email: user.email,
+        password: user.password,
       };
 
-      const { response } = await authService.signin(request);
+      const { refreshToken, response } = await authService.signin(request);
 
-      const user = await userRepository.findOne({ email: request.email });
-      const session = await sessionRepository.findOne({
-        id: response.session.id,
+      const databaseUser = await userRepository.findOne({
+        id: response.user.id,
       });
 
-      if (user == null) {
+      if (databaseUser == null) {
         fail("Expected user to be found.");
       }
 
-      if (session == null) {
+      const databaseSession = await sessionRepository.findOne({
+        id: response.session.id,
+      });
+
+      if (databaseSession == null) {
         fail("Expected session to be created.");
       }
 
-      expect(user).toEqual(
+      const databaseRefreshToken = await refreshTokenRepository.findOne({
+        token: refreshToken,
+      });
+
+      if (databaseRefreshToken == null) {
+        fail("Expected refresh token to be created.");
+      }
+
+      expect(databaseUser).toEqual(
         expect.objectContaining({
-          name: "Jane Doe",
-          email: "jane_doe@example.com",
+          id: response.user.id,
+          name: response.user.name,
+          email: response.user.email,
         })
       );
-      expect(session).toEqual(expect.objectContaining({ userId: user.id }));
+      expect(databaseSession).toEqual(
+        expect.objectContaining({
+          id: response.session.id,
+          userId: response.session.userId,
+        })
+      );
+      expect(databaseRefreshToken).toEqual(
+        expect.objectContaining({
+          sessionId: response.session.id,
+          isRevoked: false,
+        })
+      );
+      expect(databaseRefreshToken.expiresAt.getTime()).toBeGreaterThanOrEqual(
+        addDays(new Date(), 6).getTime()
+      );
       expect(response).toEqual({
-        session: { id: session.id, userId: user.id },
+        session: { id: databaseSession.id, userId: user.id },
         user: {
           id: user.id,
-          name: "Jane Doe",
-          email: "jane_doe@example.com",
-          createdAt: expect.any(Date),
+          name: user.name,
+          email: user.email,
+          createdAt: user.createdAt,
         },
       });
     });
@@ -224,60 +251,99 @@ describe("AuthService", () => {
 
   describe("refreshToken", () => {
     it("should revoke session when refresh token is revoked", async () => {
-      const { isValid } = await authService.refreshToken(
-        refreshTokens[3].token
-      );
+      const targetRefreshToken = refreshTokens[0];
 
-      const databaseRefreshTokens = await refreshTokenRepository.findAll();
+      const response = await authService.refreshToken(targetRefreshToken.token);
 
-      const expectedRefreshTokens = expect.arrayContaining(
-        refreshTokens.map((refreshToken) =>
-          refreshToken.sessionId === session2Id
-            ? expect.objectContaining({ ...refreshToken, isRevoked: true })
-            : expect.objectContaining(refreshToken)
+      const databaseRefreshTokens = await refreshTokenRepository.findAll({
+        sessionId: targetRefreshToken.sessionId,
+      });
+
+      expect(response).toEqual({ isValid: false });
+      expect(databaseRefreshTokens).toEqual(
+        expect.arrayContaining(
+          refreshTokens
+            .filter(
+              (refreshToken) =>
+                refreshToken.sessionId === targetRefreshToken.sessionId
+            )
+            .map((refreshToken) =>
+              expect.objectContaining({ ...refreshToken, isRevoked: true })
+            )
         )
       );
-
-      expect(isValid).toBe(false);
-      expect(databaseRefreshTokens).toEqual(expectedRefreshTokens);
     });
 
     it("should revoke expired token", async () => {
-      const { isValid } = await authService.refreshToken(
-        refreshTokens[1].token
-      );
+      const refreshToken = refreshTokens[1];
 
-      const databaseRefreshTokens = await refreshTokenRepository.findAll();
+      const response = await authService.refreshToken(refreshToken.token);
 
-      const expectedRefreshTokens = expect.arrayContaining(
-        refreshTokens.map((refreshToken, index) =>
-          index === 1
-            ? expect.objectContaining({ ...refreshToken, isRevoked: true })
-            : expect.objectContaining(refreshToken)
-        )
-      );
+      const databaseRefreshToken = await refreshTokenRepository.findOne({
+        token: refreshToken.token,
+      });
 
-      expect(isValid).toBe(false);
-      expect(databaseRefreshTokens).toEqual(expectedRefreshTokens);
+      expect(response).toEqual({ isValid: false });
+      expect(databaseRefreshToken).toEqual({
+        ...refreshToken,
+        isRevoked: true,
+      });
     });
 
-    it("should refresh token revoking the previous token", async () => {
-      const { isValid } = await authService.refreshToken(
-        refreshTokens[2].token
+    it("should refresh token revoking previous", async () => {
+      const user = users[0];
+      const session = sessions[0];
+      const refreshToken = refreshTokens[2];
+
+      const response = await authService.refreshToken(refreshToken.token);
+
+      if (!response.isValid) {
+        fail("Expected refresh token to be valid.");
+      }
+
+      const databaseRefreshToken = await refreshTokenRepository.findOne({
+        id: refreshToken.id,
+      });
+
+      const databaseNewRefreshToken = await refreshTokenRepository.findOne({
+        token: response.refreshToken,
+      });
+
+      if (databaseNewRefreshToken == null) {
+        fail("Expected new refresh token to be created.");
+      }
+
+      expect(databaseRefreshToken).toEqual({
+        ...refreshToken,
+        isRevoked: true,
+      });
+      expect(databaseNewRefreshToken).toEqual(
+        expect.objectContaining({
+          sessionId: refreshToken.sessionId,
+          isRevoked: false,
+        })
       );
-
-      const databaseRefreshTokens = await refreshTokenRepository.findAll();
-
-      const expectedRefreshTokens = expect.arrayContaining(
-        refreshTokens.map((refreshToken, index) =>
-          index === 2
-            ? expect.objectContaining({ ...refreshToken, isRevoked: true })
-            : expect.objectContaining(refreshToken)
-        )
-      );
-
-      expect(isValid).toBe(true);
-      expect(databaseRefreshTokens).toEqual(expectedRefreshTokens);
+      expect(
+        databaseNewRefreshToken.expiresAt.getTime()
+      ).toBeGreaterThanOrEqual(addDays(new Date(), 6).getTime());
+      expect(response).toEqual({
+        isValid: true,
+        accessToken: expect.any(String),
+        refreshToken: expect.any(String),
+        authContext: expect.objectContaining({
+          session: {
+            id: session.id,
+            userId: session.userId,
+            createdAt: session.createdAt?.toISOString(),
+          },
+          user: {
+            id: user.id,
+            name: user.name,
+            email: user.email,
+            createdAt: user.createdAt?.toISOString(),
+          },
+        }),
+      });
     });
   });
 });

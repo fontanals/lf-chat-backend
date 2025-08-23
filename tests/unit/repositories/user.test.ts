@@ -1,3 +1,4 @@
+import { randomUUID } from "crypto";
 import { IDataContext } from "../../../src/data/context";
 import { User } from "../../../src/models/entities/user";
 import { UserRepository } from "../../../src/repositories/user";
@@ -22,24 +23,24 @@ describe("UserRepository", () => {
     it("should return false when no user is found", async () => {
       dataContext.query.mockResolvedValue({ rows: [] });
 
-      const result = await userRepository.exists();
+      const exists = await userRepository.exists();
 
-      expect(result).toBe(false);
+      expect(exists).toBe(false);
     });
 
     it("should return true when a user is found", async () => {
-      const user: User = {
-        id: "user-id",
-        name: "John Doe",
-        email: "john.doe@example.com",
-        password: "hashed-password",
+      const mockUser: User = {
+        id: randomUUID(),
+        name: "name",
+        email: "email",
+        password: "password",
       };
 
-      dataContext.query.mockResolvedValue({ rows: [user] });
+      dataContext.query.mockResolvedValue({ rows: [mockUser] });
 
-      const result = await userRepository.exists();
+      const exists = await userRepository.exists();
 
-      expect(result).toBe(true);
+      expect(exists).toBe(true);
     });
   });
 
@@ -47,38 +48,32 @@ describe("UserRepository", () => {
     it("should return an empty array when no users are found", async () => {
       dataContext.query.mockResolvedValue({ rows: [] });
 
-      const result = await userRepository.findAll();
+      const users = await userRepository.findAll();
 
-      expect(result).toEqual([]);
+      expect(users).toEqual([]);
     });
 
     it("should return users", async () => {
-      const users: User[] = [
+      const mockUsers: User[] = [
         {
-          id: "user-1",
-          name: "John Doe",
-          email: "john_doe@example.com",
+          id: randomUUID(),
+          name: "name",
+          email: "email",
           password: "password",
         },
         {
-          id: "user-2",
-          name: "Jane Doe",
-          email: "jane_doe@example.com",
-          password: "password",
-        },
-        {
-          id: "user-3",
-          name: "Alice Smith",
-          email: "alice_smith@example.com",
+          id: randomUUID(),
+          name: "name",
+          email: "email",
           password: "password",
         },
       ];
 
-      dataContext.query.mockResolvedValue({ rows: users });
+      dataContext.query.mockResolvedValue({ rows: mockUsers });
 
-      const result = await userRepository.findAll();
+      const users = await userRepository.findAll();
 
-      expect(result).toEqual(users);
+      expect(users).toEqual(mockUsers);
     });
   });
 
@@ -86,24 +81,24 @@ describe("UserRepository", () => {
     it("should return null when no user is found", async () => {
       dataContext.query.mockResolvedValue({ rows: [] });
 
-      const result = await userRepository.findOne();
+      const user = await userRepository.findOne();
 
-      expect(result).toBeNull();
+      expect(user).toBeNull();
     });
 
     it("should return user", async () => {
-      const user: User = {
-        id: "user -id",
-        name: "John Doe",
-        email: "john.doe@example.com",
-        password: "hashed-password",
+      const mockUser: User = {
+        id: randomUUID(),
+        name: "name",
+        email: "email",
+        password: "password",
       };
 
-      dataContext.query.mockResolvedValue({ rows: [user] });
+      dataContext.query.mockResolvedValue({ rows: [mockUser] });
 
-      const result = await userRepository.findOne();
+      const user = await userRepository.findOne();
 
-      expect(result).toEqual(user);
+      expect(user).toEqual(mockUser);
     });
   });
 });

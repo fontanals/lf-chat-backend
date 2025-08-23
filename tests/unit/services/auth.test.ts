@@ -1,7 +1,8 @@
 import bcrypt from "bcrypt";
+import { randomUUID } from "crypto";
 import { addDays } from "date-fns";
 import { IDataContext } from "../../../src/data/context";
-import { User } from "../../../src/models/entities/user";
+import { User, UserDto } from "../../../src/models/entities/user";
 import { SignupRequest } from "../../../src/models/requests/auth";
 import { IRefreshTokenRepository } from "../../../src/repositories/refresh-token";
 import { ISessionRepository } from "../../../src/repositories/session";
@@ -61,7 +62,7 @@ describe("AuthService", () => {
   describe("signup", () => {
     it("should throw a bad request error when request does not match request schema", async () => {
       try {
-        await authService.signup({ email: "john.doe@example.com" } as any);
+        await authService.signup({ email: "email" } as any);
 
         fail("Expected to throw bad request error");
       } catch (error) {
@@ -80,13 +81,14 @@ describe("AuthService", () => {
         userRepository.exists.mockResolvedValue(true);
 
         await authService.signup({
-          name: "john doe",
-          email: "john.doe@example.com",
+          name: "name",
+          email: "email@example.com",
           password: "password",
         });
 
         fail("Expected to throw invaid email or password error");
       } catch (error) {
+        expect(error).toBeInstanceOf(ApplicationError);
         expect(error).toBeInstanceOf(ApplicationError);
         expect((error as ApplicationError).statusCode).toBe(
           HttpStatusCode.BadRequest
@@ -99,23 +101,24 @@ describe("AuthService", () => {
 
     it("should return a user, session and the access tokens", async () => {
       const request: SignupRequest = {
-        name: "john doe",
-        email: "john.doe@example.com",
+        name: "name",
+        email: "email@example.com",
         password: "password",
       };
 
       const result = await authService.signup(request);
 
-      expect(result.accessToken).toEqual(expect.any(String));
-      expect(result.refreshToken).toEqual(expect.any(String));
-      expect(result.response.session).toEqual({
-        id: expect.any(String),
-        userId: expect.any(String),
-      });
-      expect(result.response.user).toEqual({
-        id: expect.any(String),
-        name: request.name,
-        email: request.email,
+      expect(result).toEqual({
+        accessToken: expect.any(String),
+        refreshToken: expect.any(String),
+        response: {
+          session: { id: expect.any(String), userId: expect.any(String) },
+          user: {
+            id: expect.any(String),
+            name: request.name,
+            email: request.email,
+          },
+        },
       });
     });
   });
@@ -123,7 +126,7 @@ describe("AuthService", () => {
   describe("signin", () => {
     it("should throw a bad request error when request does not match schema", async () => {
       try {
-        await authService.signin({ email: "john.doe@example.com" } as any);
+        await authService.signin({ email: "email" } as any);
 
         fail("Expected to throw bad request error");
       } catch (error) {
@@ -142,7 +145,7 @@ describe("AuthService", () => {
         userRepository.exists.mockResolvedValue(false);
 
         await authService.signin({
-          email: "john.doe@example.com",
+          email: "email@example.com",
           password: "password",
         });
 
@@ -163,9 +166,9 @@ describe("AuthService", () => {
         const hashedPassword = await bcrypt.hash("password", 10);
 
         const user: User = {
-          id: "user-id",
-          name: "john doe",
-          email: "john.doe@example.com",
+          id: randomUUID(),
+          name: "name",
+          email: "email@example.com",
           password: hashedPassword,
         };
 
@@ -173,7 +176,7 @@ describe("AuthService", () => {
 
         await authService.signin({
           email: user.email,
-          password: "wrong-password",
+          password: "wrong password",
         });
 
         fail("Expected to throw invalid email or password error");
@@ -192,9 +195,9 @@ describe("AuthService", () => {
       const password = "password";
       const hashedPassword = await bcrypt.hash(password, 10);
       const user: User = {
-        id: "user-id",
-        name: "john doe",
-        email: "john.doe@example.com",
+        id: randomUUID(),
+        name: "name",
+        email: "email@example.com",
         password: hashedPassword,
       };
 
@@ -202,38 +205,32 @@ describe("AuthService", () => {
 
       const result = await authService.signin({ email: user.email, password });
 
-      expect(result.accessToken).toEqual(expect.any(String));
-      expect(result.refreshToken).toEqual(expect.any(String));
-      expect(result.response.session).toEqual({
-        id: expect.any(String),
-        userId: expect.any(String),
-      });
-      expect(result.response.user).toEqual({
-        id: expect.any(String),
-        name: user.name,
-        email: user.email,
+      expect(result).toEqual({
+        accessToken: expect.any(String),
+        refreshToken: expect.any(String),
+        response: {
+          session: { id: expect.any(String), userId: expect.any(String) },
+          user: {
+            id: expect.any(String),
+            name: user.name,
+            email: user.email,
+          },
+        },
       });
     });
   });
 
   describe("validateAccessToken", () => {
     it("should return invalid when access token is invalid", () => {
-      const accessToken = "invalid";
-
-      const result = authService.validateAccessToken(accessToken);
+      const result = authService.validateAccessToken("invalid");
 
       expect(result.isValid).toBe(false);
     });
 
     it("should return valid with auth context when access token is valid", () => {
-      const authContext: AuthContext = {
-        user: {
-          id: "user-id",
-          name: "john doe",
-          email: "john.doe@example.com",
-        },
-        session: { id: "session-id", userId: "user-id" },
-      };
+      const user: UserDto = { id: randomUUID(), name: "name", email: "email" };
+      const session = { id: randomUUID(), userId: user.id };
+      const authContext: AuthContext = { session, user };
 
       const accessToken = authService.generateAccessToken(authContext);
 
@@ -243,30 +240,18 @@ describe("AuthService", () => {
         fail("Expected access token to be valid.");
       }
 
-      expect(result.isValid).toBe(true);
-      expect(result.authContext.user).toEqual(authContext.user);
-      expect(result.authContext.session).toEqual(authContext.session);
+      expect(result).toEqual({
+        isValid: true,
+        authContext: expect.objectContaining({ session, user }),
+      });
     });
   });
 
   describe("validateRefreshToken", () => {
-    it("should return invalid when refresh token is invalid", async () => {
-      const refreshToken = "invalid";
-
-      const result = await authService.refreshToken(refreshToken);
-
-      expect(result.isValid).toBe(false);
-    });
-
-    it("should return invalid when refresh token data is not found", async () => {
-      const authContext: AuthContext = {
-        user: {
-          id: "user-id",
-          name: "john doe",
-          email: "john.doe@example.com",
-        },
-        session: { id: "session-id", userId: "user-id" },
-      };
+    it("should return invalid when refresh token is not found", async () => {
+      const user: UserDto = { id: randomUUID(), name: "name", email: "email" };
+      const session = { id: randomUUID(), userId: user.id };
+      const authContext: AuthContext = { session, user };
 
       const refreshToken = authService.generateRefreshToken(authContext);
 
@@ -274,23 +259,18 @@ describe("AuthService", () => {
 
       const result = await authService.refreshToken(refreshToken);
 
-      expect(result.isValid).toBe(false);
+      expect(result).toEqual({ isValid: false });
     });
 
     it("should return invalid when refresh token is revoked", async () => {
-      const authContext: AuthContext = {
-        user: {
-          id: "user-id",
-          name: "john doe",
-          email: "john.doe@example.com",
-        },
-        session: { id: "session-id", userId: "user-id" },
-      };
+      const user: UserDto = { id: randomUUID(), name: "name", email: "email" };
+      const session = { id: randomUUID(), userId: user.id };
+      const authContext: AuthContext = { session, user };
 
       const refreshToken = authService.generateRefreshToken(authContext);
 
       refreshTokenRepository.findOne.mockResolvedValue({
-        id: "refresh-token-id",
+        id: randomUUID(),
         token: refreshToken,
         sessionId: authContext.session.id,
         expiresAt: addDays(new Date(), 2),
@@ -299,23 +279,18 @@ describe("AuthService", () => {
 
       const result = await authService.refreshToken(refreshToken);
 
-      expect(result.isValid).toBe(false);
+      expect(result).toEqual({ isValid: false });
     });
 
     it("should return invalid when refresh token is expired", async () => {
-      const authContext: AuthContext = {
-        user: {
-          id: "user-id",
-          name: "john doe",
-          email: "john.doe@example.com",
-        },
-        session: { id: "session-id", userId: "user-id" },
-      };
+      const user: UserDto = { id: randomUUID(), name: "name", email: "email" };
+      const session = { id: randomUUID(), userId: user.id };
+      const authContext: AuthContext = { session, user };
 
       const refreshToken = authService.generateRefreshToken(authContext);
 
       refreshTokenRepository.findOne.mockResolvedValue({
-        id: "refresh-token-id",
+        id: randomUUID(),
         token: refreshToken,
         sessionId: authContext.session.id,
         expiresAt: addDays(new Date(), -2),
@@ -324,23 +299,18 @@ describe("AuthService", () => {
 
       const result = await authService.refreshToken(refreshToken);
 
-      expect(result.isValid).toBe(false);
+      expect(result).toEqual({ isValid: false });
     });
 
     it("should return valid with new access and refresh tokens when refresh token is valid", async () => {
-      const authContext: AuthContext = {
-        user: {
-          id: "user-id",
-          name: "john doe",
-          email: "john.doe@example.com",
-        },
-        session: { id: "session-id", userId: "user-id" },
-      };
+      const user: UserDto = { id: randomUUID(), name: "name", email: "email" };
+      const session = { id: randomUUID(), userId: user.id };
+      const authContext: AuthContext = { session, user };
 
       const refreshToken = authService.generateRefreshToken(authContext);
 
       refreshTokenRepository.findOne.mockResolvedValue({
-        id: "refresh-token-id",
+        id: randomUUID(),
         token: refreshToken,
         sessionId: authContext.session.id,
         expiresAt: addDays(new Date(), 2),
@@ -353,11 +323,15 @@ describe("AuthService", () => {
         throw new Error("Expected refresh token to be valid.");
       }
 
-      expect(result.isValid).toBe(true);
-      expect(result.accessToken).toEqual(expect.any(String));
-      expect(result.refreshToken).toEqual(expect.any(String));
-      expect(result.authContext.user).toEqual(authContext.user);
-      expect(result.authContext.session).toEqual(authContext.session);
+      expect(result).toEqual({
+        isValid: true,
+        accessToken: expect.any(String),
+        refreshToken: expect.any(String),
+        authContext: expect.objectContaining({
+          session: authContext.session,
+          user: authContext.user,
+        }),
+      });
     });
   });
 });

@@ -1,3 +1,4 @@
+import { randomUUID } from "crypto";
 import { IDataContext } from "../../../src/data/context";
 import { Message } from "../../../src/models/entities/message";
 import { MessageRepository } from "../../../src/repositories/message";
@@ -22,27 +23,32 @@ describe("MessageRepository", () => {
     it("should return an empty array when no messages are found", async () => {
       dataContext.query.mockResolvedValue({ rows: [] });
 
-      const result = await messageRepository.findAll();
+      const messages = await messageRepository.findAll();
 
-      expect(result).toEqual([]);
+      expect(messages).toEqual([]);
     });
 
     it("should return messages", async () => {
-      const messages: Message[] = [
-        { id: "message-1", role: "user", content: "Hello", chatId: "chat-1" },
+      const mockMessages: Message[] = [
         {
-          id: "message-2",
+          id: randomUUID(),
+          role: "user",
+          content: "message",
+          chatId: randomUUID(),
+        },
+        {
+          id: randomUUID(),
           role: "assistant",
-          content: "Hi there!",
-          chatId: "chat-1",
+          content: "message",
+          chatId: randomUUID(),
         },
       ];
 
-      dataContext.query.mockResolvedValue({ rows: messages });
+      dataContext.query.mockResolvedValue({ rows: mockMessages });
 
-      const result = await messageRepository.findAll();
+      const messages = await messageRepository.findAll();
 
-      expect(result).toEqual(messages);
+      expect(messages).toEqual(mockMessages);
     });
   });
 });

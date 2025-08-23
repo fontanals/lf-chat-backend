@@ -20,21 +20,21 @@ describe("ChatRepository", () => {
   const users: User[] = [
     {
       id: randomUUID(),
-      name: "User 1",
+      name: "user 1",
       email: "user1@example.com",
       password: "password",
-      createdAt: addDays(new Date(), -50),
+      createdAt: addDays(new Date(), -14),
     },
     {
       id: randomUUID(),
-      name: "User 2",
+      name: "user 2",
       email: "user2@example.com",
       password: "password",
-      createdAt: addDays(new Date(), -102),
+      createdAt: addDays(new Date(), -16),
     },
     {
       id: randomUUID(),
-      name: "User 3",
+      name: "user 3",
       email: "user3@example.com",
       password: "password",
       createdAt: addDays(new Date(), -13),
@@ -43,31 +43,31 @@ describe("ChatRepository", () => {
   const chats: Chat[] = [
     {
       id: randomUUID(),
-      title: "User 1 Chat 1",
+      title: "user 1 chat 1",
       userId: users[0].id,
       createdAt: addDays(new Date(), -1),
     },
     {
       id: randomUUID(),
-      title: "User 1 Chat 2",
+      title: "user 1 chat 2",
       userId: users[0].id,
       createdAt: addDays(new Date(), -2),
     },
     {
       id: randomUUID(),
-      title: "User 1 Chat 3",
+      title: "user 1 chat 3",
       userId: users[0].id,
       createdAt: addDays(new Date(), -3),
     },
     {
       id: randomUUID(),
-      title: "User 2 Chat 1",
+      title: "user 2 chat 1",
       userId: users[1].id,
       createdAt: addDays(new Date(), -4),
     },
     {
       id: randomUUID(),
-      title: "User 2 Chat 2",
+      title: "user 2 chat 2",
       userId: users[1].id,
       createdAt: addDays(new Date(), -5),
     },
@@ -112,15 +112,15 @@ describe("ChatRepository", () => {
     it("should return all chats ordered by creation date desc", async () => {
       const databaseChats = await chatRepository.findAll();
 
-      const expectedChats = chats
-        .sort(
-          (chatA, chatB) =>
-            (chatB.createdAt?.getTime() ?? 0) -
-            (chatA.createdAt?.getTime() ?? 0)
-        )
-        .map((chat) => expect.objectContaining(chat));
-
-      expect(databaseChats).toEqual(expectedChats);
+      expect(databaseChats).toEqual(
+        chats
+          .sort(
+            (chatA, chatB) =>
+              (chatB.createdAt?.getTime() ?? 0) -
+              (chatA.createdAt?.getTime() ?? 0)
+          )
+          .map((chat) => expect.objectContaining(chat))
+      );
     });
 
     it("should return an empty array when user has no chats", async () => {
@@ -136,16 +136,16 @@ describe("ChatRepository", () => {
 
       const databaseUserChats = await chatRepository.findAll({ userId });
 
-      const expectedUserChats = chats
-        .filter((chat) => chat.userId === userId)
-        .sort(
-          (chatA, chatB) =>
-            (chatB.createdAt?.getTime() ?? 0) -
-            (chatA.createdAt?.getTime() ?? 0)
-        )
-        .map((chat) => expect.objectContaining(chat));
-
-      expect(databaseUserChats).toEqual(expectedUserChats);
+      expect(databaseUserChats).toEqual(
+        chats
+          .filter((chat) => chat.userId === userId)
+          .sort(
+            (chatA, chatB) =>
+              (chatB.createdAt?.getTime() ?? 0) -
+              (chatA.createdAt?.getTime() ?? 0)
+          )
+          .map((chat) => expect.objectContaining(chat))
+      );
     });
   });
 
@@ -161,18 +161,16 @@ describe("ChatRepository", () => {
         { userId }
       );
 
-      const expectedPaginatedUserChats = {
+      expect(databasePaginatedUserChats).toEqual({
         items: [],
         totalItems: 0,
         page,
         pageSize,
-        totalPages: 0,
-      };
-
-      expect(databasePaginatedUserChats).toEqual(expectedPaginatedUserChats);
+        totalPages: 1,
+      });
     });
 
-    it("should return all user chats ordered by creation date desc paginated", async () => {
+    it("should return user chats ordered by creation date desc paginated", async () => {
       const userId = users[0].id;
       const page = 2;
       const pageSize = 2;
@@ -183,19 +181,23 @@ describe("ChatRepository", () => {
         { userId }
       );
 
-      const userChats = chats.filter((chat) => chat.userId === userId);
+      const sortedUserChats = chats
+        .filter((chat) => chat.userId === userId)
+        .sort(
+          (chatA, chatB) =>
+            (chatB.createdAt?.getTime() ?? 0) -
+            (chatA.createdAt?.getTime() ?? 0)
+        );
 
-      const expectedPaginatedUserChats = {
-        items: userChats
+      expect(databasePaginatedUserChats).toEqual({
+        items: sortedUserChats
           .slice((page - 1) * pageSize, page * pageSize)
           .map((chat) => expect.objectContaining(chat)),
-        totalItems: userChats.length,
+        totalItems: sortedUserChats.length,
         page,
         pageSize,
-        totalPages: Math.ceil(userChats.length / pageSize),
-      };
-
-      expect(databasePaginatedUserChats).toEqual(expectedPaginatedUserChats);
+        totalPages: Math.ceil(sortedUserChats.length / pageSize),
+      });
     });
   });
 
@@ -213,9 +215,7 @@ describe("ChatRepository", () => {
 
       const databaseChat = await chatRepository.findOne({ id: chat.id });
 
-      const expectedChat = expect.objectContaining(chat);
-
-      expect(databaseChat).toEqual(expectedChat);
+      expect(databaseChat).toEqual(expect.objectContaining(chat));
     });
   });
 
@@ -231,32 +231,32 @@ describe("ChatRepository", () => {
 
       const databaseChats = await chatRepository.findAll();
 
-      const expectedChats = expect.arrayContaining(
-        [...chats, chat].map((chat) => expect.objectContaining(chat))
+      expect(databaseChats).toEqual(
+        expect.arrayContaining(
+          [...chats, chat].map((chat) => expect.objectContaining(chat))
+        )
       );
-
-      expect(databaseChats).toEqual(expectedChats);
     });
   });
 
   describe("update", () => {
-    it("should update chat", async () => {
+    it("should update chat title", async () => {
       const chatId = chats[0].id;
-      const updatedChatTitle = "Updated Chat Title";
+      const updatedChatTitle = "updated title";
 
       await chatRepository.update(chatId, { title: updatedChatTitle });
 
       const databaseChats = await chatRepository.findAll();
 
-      const expectedChats = expect.arrayContaining(
-        chats.map((chat) =>
-          chat.id === chatId
-            ? expect.objectContaining({ ...chat, title: updatedChatTitle })
-            : expect.objectContaining(chat)
+      expect(databaseChats).toEqual(
+        expect.arrayContaining(
+          chats.map((chat) =>
+            chat.id === chatId
+              ? expect.objectContaining({ ...chat, title: updatedChatTitle })
+              : expect.objectContaining(chat)
+          )
         )
       );
-
-      expect(databaseChats).toEqual(expectedChats);
     });
   });
 
@@ -266,11 +266,11 @@ describe("ChatRepository", () => {
 
       const databaseChats = await chatRepository.findAll();
 
-      const expectedChats = expect.arrayContaining(
-        chats.map((chat) => expect.objectContaining(chat))
+      expect(databaseChats).toEqual(
+        expect.arrayContaining(
+          chats.map((chat) => expect.objectContaining(chat))
+        )
       );
-
-      expect(databaseChats).toEqual(expectedChats);
     });
 
     it("should delete chat", async () => {
@@ -280,13 +280,13 @@ describe("ChatRepository", () => {
 
       const databaseChats = await chatRepository.findAll();
 
-      const expectedChats = expect.arrayContaining(
-        chats
-          .filter((chat) => chat.id !== chatId)
-          .map((chat) => expect.objectContaining(chat))
+      expect(databaseChats).toEqual(
+        expect.arrayContaining(
+          chats
+            .filter((chat) => chat.id !== chatId)
+            .map((chat) => expect.objectContaining(chat))
+        )
       );
-
-      expect(databaseChats).toEqual(expectedChats);
     });
   });
 });

@@ -1,3 +1,4 @@
+import { randomUUID } from "crypto";
 import { Request, Response } from "express";
 import { Session } from "../../../src/models/entities/session";
 import { UserDto } from "../../../src/models/entities/user";
@@ -33,12 +34,8 @@ describe("Auth Routes", () => {
     it("should return user and session with authorization header and refresh token cookie", async () => {
       services.get.mockReturnValue(authService);
 
-      const user: UserDto = {
-        id: "user-id",
-        name: "John Doe",
-        email: "john.doe@example.com",
-      };
-      const session: Session = { id: "session-id", userId: user.id };
+      const user: UserDto = { id: randomUUID(), name: "name", email: "email" };
+      const session: Session = { id: randomUUID(), userId: user.id };
       const accessToken = "access-token";
       const refreshToken = "refresh-token";
 
@@ -50,10 +47,9 @@ describe("Auth Routes", () => {
 
       response.header.mockReturnValue(response);
 
-      const result = await signup(request, response, services);
+      const signupResponse = await signup(request, response, services);
 
-      expect(result.user).toEqual(user);
-      expect(result.session).toEqual(session);
+      expect(signupResponse).toEqual({ session, user });
       expect(response.header).toHaveBeenCalledWith(
         "Authorization",
         `Bearer ${accessToken}`
@@ -70,12 +66,8 @@ describe("Auth Routes", () => {
     it("should return user and session with authorization header and refresh token cookie", async () => {
       services.get.mockReturnValue(authService);
 
-      const user: UserDto = {
-        id: "user-id",
-        name: "John Doe",
-        email: "john.doe@example.com",
-      };
-      const session: Session = { id: "session-id", userId: user.id };
+      const user: UserDto = { id: randomUUID(), name: "name", email: "email" };
+      const session: Session = { id: randomUUID(), userId: user.id };
       const accessToken = "access-token";
       const refreshToken = "refresh-token";
 
@@ -87,10 +79,9 @@ describe("Auth Routes", () => {
 
       response.header.mockReturnValue(response);
 
-      const result = await signin(request, response, services);
+      const signinResponse = await signin(request, response, services);
 
-      expect(result.user).toEqual(user);
-      expect(result.session).toEqual(session);
+      expect(signinResponse).toEqual({ session, user });
       expect(response.header).toHaveBeenCalledWith(
         "Authorization",
         `Bearer ${accessToken}`
