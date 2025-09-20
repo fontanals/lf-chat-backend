@@ -8,29 +8,15 @@ describe("DataContext", () => {
   const pool = createTestPool();
   const dataContext = new DataContext(pool);
 
-  const users: User[] = [
-    {
-      id: randomUUID(),
-      name: "user 1",
-      email: "user1@example.com",
-      password: "password",
-      createdAt: addDays(new Date(), -50),
-    },
-    {
-      id: randomUUID(),
-      name: "user 2",
-      email: "user2@example.com",
-      password: "password",
-      createdAt: addDays(new Date(), -102),
-    },
-    {
-      id: randomUUID(),
-      name: "user 3",
-      email: "user3@example.com",
-      password: "password",
-      createdAt: addDays(new Date(), -13),
-    },
-  ];
+  const users: User[] = Array.from({ length: 3 }, (_, index) => ({
+    id: randomUUID(),
+    name: `user ${index + 1}`,
+    email: `user${index + 1}@example.com`,
+    password: "password",
+    displayName: "user",
+    customPreferences: null,
+    createdAt: addDays(new Date(), -index),
+  }));
 
   const getUsers = async () => {
     return await dataContext.query<User>(
@@ -39,6 +25,8 @@ describe("DataContext", () => {
         name,
         email,
         password,
+        display_name AS "displayName",
+        custom_preferences AS "customPreferences",
         created_at AS "createdAt"
       FROM "user";`
     );
@@ -47,10 +35,18 @@ describe("DataContext", () => {
   const createUser = async (user: User) => {
     await dataContext.execute(
       `INSERT INTO "user"
-      (id, name, email, password, created_at)
+      (id, name, email, password, display_name, custom_preferences, created_at)
       VALUES
-      ($1, $2, $3, $4, $5);`,
-      [user.id, user.name, user.email, user.password, user.createdAt]
+      ($1, $2, $3, $4, $5, $6, $7);`,
+      [
+        user.id,
+        user.name,
+        user.email,
+        user.password,
+        user.displayName,
+        user.customPreferences,
+        user.createdAt,
+      ]
     );
   };
 
@@ -78,9 +74,11 @@ describe("DataContext", () => {
     it("should create a new user", async () => {
       const newUser: User = {
         id: randomUUID(),
-        name: "user 4",
-        email: "user4@example.com",
+        name: "new user",
+        email: "new_user@example.com",
         password: "password",
+        displayName: "new user",
+        customPreferences: null,
         createdAt: new Date(),
       };
 
@@ -98,9 +96,11 @@ describe("DataContext", () => {
 
       await createUser({
         id: randomUUID(),
-        name: "user 4",
-        email: "user4@example.com",
+        name: "new user",
+        email: "new_user@example.com",
         password: "password",
+        displayName: "new user",
+        customPreferences: null,
         createdAt: new Date(),
       });
 
@@ -114,9 +114,11 @@ describe("DataContext", () => {
     it("should commit transaction", async () => {
       const newUser: User = {
         id: randomUUID(),
-        name: "user 4",
-        email: "user4@example.com",
+        name: "new user",
+        email: "new_user@example.com",
         password: "password",
+        displayName: "new user",
+        customPreferences: null,
         createdAt: new Date(),
       };
 

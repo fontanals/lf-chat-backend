@@ -3,6 +3,8 @@ CREATE TABLE "user" (
     "name" text NOT NULL,
     "email" text NOT NULL UNIQUE,
     "password" text NOT NULL,
+    "display_name" text NOT NULL,
+    "custom_preferences" text,
     "created_at" timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 

@@ -1,93 +1,95 @@
-import { Request, Response } from "express";
+import { Router } from "express";
 import {
   DeleteChatParams,
-  GetChatMessagesParams,
+  GetChatParams,
   SendMessageParams,
   UpdateChatParams,
 } from "../models/requests/chat";
-import { IServiceProvider } from "../service-provider";
+import { ServiceContainer } from "../service-provider";
+import { jsonRequestHandler, sseRequestHandler } from "../utils/express";
 
-export async function getChats(
-  req: Request,
-  res: Response,
-  services: IServiceProvider
-) {
-  const chatService = services.get("ChatService");
+export function createChatRoutes(serviceContainer: ServiceContainer) {
+  const router = Router();
 
-  const response = await chatService.getChats(req.query, req.authContext);
+  router.get(
+    "/",
+    jsonRequestHandler(serviceContainer, async (req, res, services) => {
+      const chatService = services.get("ChatService");
 
-  return response;
-}
+      const response = await chatService.getChats(req.query, req.authContext);
 
-export async function getChatMessages(
-  req: Request,
-  res: Response,
-  services: IServiceProvider
-) {
-  const chatService = services.get("ChatService");
-
-  const response = await chatService.getChatMessages(
-    req.params as GetChatMessagesParams,
-    req.authContext
+      return response;
+    })
   );
 
-  return response;
-}
+  router.get(
+    "/:chatId",
+    jsonRequestHandler(serviceContainer, async (req, res, services) => {
+      const chatService = services.get("ChatService");
 
-export async function createChat(
-  req: Request,
-  res: Response,
-  services: IServiceProvider
-) {
-  const chatService = services.get("ChatService");
+      const response = await chatService.getChat(
+        req.params as GetChatParams,
+        req.query,
+        req.authContext
+      );
 
-  await chatService.createChat(req.body, req.authContext, (event) =>
-    res.write(`data: ${JSON.stringify(event)}\n\n`)
-  );
-}
-
-export async function sendMessage(
-  req: Request,
-  res: Response,
-  services: IServiceProvider
-) {
-  const chatService = services.get("ChatService");
-
-  await chatService.sendMessage(
-    req.params as SendMessageParams,
-    req.body,
-    req.authContext,
-    (event) => res.write(`data: ${JSON.stringify(event)}\n\n`)
-  );
-}
-
-export async function updateChat(
-  req: Request,
-  res: Response,
-  services: IServiceProvider
-) {
-  const chatService = services.get("ChatService");
-
-  const response = await chatService.updateChat(
-    req.params as UpdateChatParams,
-    req.body,
-    req.authContext
+      return response;
+    })
   );
 
-  return response;
-}
+  router.post(
+    "/",
+    sseRequestHandler(serviceContainer, async (req, res, services) => {
+      const chatService = services.get("ChatService");
 
-export async function deleteChat(
-  req: Request,
-  res: Response,
-  services: IServiceProvider
-) {
-  const chatService = services.get("ChatService");
-
-  const response = await chatService.deleteChat(
-    req.params as DeleteChatParams,
-    req.authContext
+      await chatService.createChat(req.body, req.authContext, (event) =>
+        res.write(`data: ${JSON.stringify(event)}\n\n`)
+      );
+    })
   );
 
-  return response;
+  router.post(
+    "/:chatId/messages",
+    sseRequestHandler(serviceContainer, async (req, res, services) => {
+      const chatService = services.get("ChatService");
+
+      await chatService.sendMessage(
+        req.params as SendMessageParams,
+        req.body,
+        req.authContext,
+        (event) => res.write(`data: ${JSON.stringify(event)}\n\n`)
+      );
+    })
+  );
+
+  router.patch(
+    "/:chatId",
+    jsonRequestHandler(serviceContainer, async (req, res, services) => {
+      const chatService = services.get("ChatService");
+
+      const response = await chatService.updateChat(
+        req.params as UpdateChatParams,
+        req.body,
+        req.authContext
+      );
+
+      return response;
+    })
+  );
+
+  router.delete(
+    "/:chatId",
+    jsonRequestHandler(serviceContainer, async (req, res, services) => {
+      const chatService = services.get("ChatService");
+
+      const response = await chatService.deleteChat(
+        req.params as DeleteChatParams,
+        req.authContext
+      );
+
+      return response;
+    })
+  );
+
+  return router;
 }

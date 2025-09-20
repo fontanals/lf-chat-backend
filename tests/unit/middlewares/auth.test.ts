@@ -4,7 +4,7 @@ import jsonwebtoken from "jsonwebtoken";
 import { config } from "../../../src/config";
 import { authMiddleware } from "../../../src/middlewares/auth";
 import { Session } from "../../../src/models/entities/session";
-import { UserDto } from "../../../src/models/entities/user";
+import { mapUserToDto, User } from "../../../src/models/entities/user";
 import { IServiceProvider } from "../../../src/service-provider";
 import { AuthContext, IAuthService } from "../../../src/services/auth";
 import { refreshTokenCookieName } from "../../../src/utils/constants";
@@ -19,10 +19,23 @@ describe("authMiddleware", () => {
   let request: jest.Mocked<Request>;
   let response: jest.Mocked<Response>;
 
+  const user: User = {
+    id: randomUUID(),
+    name: "user 1",
+    email: "user1@example.com",
+    password: "password",
+    displayName: "user",
+    customPreferences: null,
+  };
+  const userDto = mapUserToDto(user);
+  const session: Session = { id: randomUUID(), userId: userDto.id };
+  const authContext: AuthContext = { session, user: userDto };
+
   beforeEach(() => {
     authService = {
       signup: jest.fn(),
       signin: jest.fn(),
+      signout: jest.fn(),
       validateAccessToken: jest.fn(),
       refreshToken: jest.fn(),
     };
@@ -59,10 +72,6 @@ describe("authMiddleware", () => {
 
   it("should set request auth context and call next when access token is valid", async () => {
     const middleware = authMiddleware(services);
-
-    const user: UserDto = { id: randomUUID(), name: "name", email: "email" };
-    const session: Session = { id: randomUUID(), userId: user.id };
-    const authContext: AuthContext = { session, user };
 
     const accessToken = jsonwebtoken.sign(
       authContext,
@@ -108,10 +117,6 @@ describe("authMiddleware", () => {
 
   it("should refresh token setting new access token header and refresh token cookie, set request auth context and call next function", async () => {
     const middleware = authMiddleware(services);
-
-    const user: UserDto = { id: randomUUID(), name: "name", email: "email" };
-    const session: Session = { id: randomUUID(), userId: user.id };
-    const authContext: AuthContext = { session, user };
 
     const refreshToken = jsonwebtoken.sign(
       authContext,

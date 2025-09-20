@@ -7,6 +7,17 @@ describe("RefreshTokenRepository", () => {
   let dataContext: jest.Mocked<IDataContext>;
   let refreshTokenRepository: RefreshTokenRepository;
 
+  const mockRefreshTokens: RefreshToken[] = Array.from(
+    { length: 5 },
+    (_, index) => ({
+      id: randomUUID(),
+      token: `refresh token ${index + 1}`,
+      expiresAt: new Date(),
+      isRevoked: false,
+      sessionId: randomUUID(),
+    })
+  );
+
   beforeEach(() => {
     dataContext = {
       query: jest.fn(),
@@ -29,23 +40,6 @@ describe("RefreshTokenRepository", () => {
     });
 
     it("should return refresh tokens", async () => {
-      const mockRefreshTokens: RefreshToken[] = [
-        {
-          id: randomUUID(),
-          token: "token",
-          expiresAt: new Date(),
-          isRevoked: false,
-          sessionId: randomUUID(),
-        },
-        {
-          id: randomUUID(),
-          token: "token",
-          expiresAt: new Date(),
-          isRevoked: false,
-          sessionId: randomUUID(),
-        },
-      ];
-
       dataContext.query.mockResolvedValue({ rows: mockRefreshTokens });
 
       const refreshTokens = await refreshTokenRepository.findAll();
@@ -64,13 +58,7 @@ describe("RefreshTokenRepository", () => {
     });
 
     it("should return refresh token", async () => {
-      const mockRefreshToken: RefreshToken = {
-        id: randomUUID(),
-        token: "token",
-        expiresAt: new Date(),
-        isRevoked: false,
-        sessionId: randomUUID(),
-      };
+      const mockRefreshToken = mockRefreshTokens[0];
 
       dataContext.query.mockResolvedValue({ rows: [mockRefreshToken] });
 

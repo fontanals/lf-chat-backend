@@ -7,6 +7,15 @@ describe("UserRepository", () => {
   let dataContext: jest.Mocked<IDataContext>;
   let userRepository: UserRepository;
 
+  const mockUsers: User[] = Array.from({ length: 5 }, (_, index) => ({
+    id: randomUUID(),
+    name: `user ${index + 1}`,
+    email: `user${index + 1}@example.com`,
+    password: "password",
+    displayName: "user",
+    customPreferences: null,
+  }));
+
   beforeEach(() => {
     dataContext = {
       query: jest.fn(),
@@ -29,12 +38,7 @@ describe("UserRepository", () => {
     });
 
     it("should return true when a user is found", async () => {
-      const mockUser: User = {
-        id: randomUUID(),
-        name: "name",
-        email: "email",
-        password: "password",
-      };
+      const mockUser = mockUsers[0];
 
       dataContext.query.mockResolvedValue({ rows: [mockUser] });
 
@@ -54,21 +58,6 @@ describe("UserRepository", () => {
     });
 
     it("should return users", async () => {
-      const mockUsers: User[] = [
-        {
-          id: randomUUID(),
-          name: "name",
-          email: "email",
-          password: "password",
-        },
-        {
-          id: randomUUID(),
-          name: "name",
-          email: "email",
-          password: "password",
-        },
-      ];
-
       dataContext.query.mockResolvedValue({ rows: mockUsers });
 
       const users = await userRepository.findAll();
@@ -87,12 +76,7 @@ describe("UserRepository", () => {
     });
 
     it("should return user", async () => {
-      const mockUser: User = {
-        id: randomUUID(),
-        name: "name",
-        email: "email",
-        password: "password",
-      };
+      const mockUser = mockUsers[0];
 
       dataContext.query.mockResolvedValue({ rows: [mockUser] });
 

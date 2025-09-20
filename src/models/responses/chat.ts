@@ -1,10 +1,9 @@
-import { Paginated, ServerSentEvent } from "../../utils/types";
+import { ServerSentEvent } from "../../utils/types";
 import { Chat } from "../entities/chat";
-import { Message } from "../entities/message";
 
-export type GetChatsResponse = { chats: Paginated<Chat> };
+export type GetChatsResponse = { chats: Chat[]; totalChats: number };
 
-export type GetChatMessagesResponse = { messages: Message[] };
+export type GetChatResponse = { chat: Chat };
 
 export type ChatServerSentEvent =
   | ServerSentEvent<"start", { messageId: string }>

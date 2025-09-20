@@ -6,6 +6,8 @@ describe("DataContext", () => {
   let pool: jest.Mocked<Pool>;
   let dataContext: DataContext;
 
+  const mockResult = { rows: [{ id: 1 }] };
+
   beforeEach(() => {
     client = {
       query: jest.fn(),
@@ -24,7 +26,6 @@ describe("DataContext", () => {
     it("should execute query using pool", async () => {
       const query = "query";
       const params = ["param"];
-      const mockResult = { rows: [{ id: 1 }] };
 
       (pool.query as any).mockResolvedValue(mockResult);
 
@@ -37,7 +38,6 @@ describe("DataContext", () => {
     it("should execute query using client when using transaction", async () => {
       const query = "query";
       const params = ["param"];
-      const mockResult = { rows: [{ id: 1 }] };
 
       await dataContext.begin();
 

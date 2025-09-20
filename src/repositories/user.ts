@@ -1,7 +1,6 @@
 import { IDataContext } from "../data/context";
 import { User } from "../models/entities/user";
 import { ArrayUtils } from "../utils/arrays";
-import { SqlUtils } from "../utils/sql";
 import { NullablePartial } from "../utils/types";
 
 export type UserFilters = NullablePartial<User>;
@@ -11,6 +10,7 @@ export interface IUserRepository {
   findAll(filters?: UserFilters): Promise<User[]>;
   findOne(filters?: UserFilters): Promise<User | null>;
   create(user: User): Promise<void>;
+  update(id: string, user: NullablePartial<User>): Promise<void>;
 }
 
 export class UserRepository implements IUserRepository {
@@ -57,6 +57,8 @@ export class UserRepository implements IUserRepository {
         name,
         email,
         password,
+        display_name AS "displayName",
+        custom_preferences AS "customPreferences",
         created_at AS "createdAt"
       FROM "user"
       WHERE
@@ -88,6 +90,8 @@ export class UserRepository implements IUserRepository {
         name,
         email,
         password,
+        display_name AS "displayName",
+        custom_preferences AS "customPreferences",
         created_at AS "createdAt"
       FROM "user"
       WHERE
@@ -115,10 +119,47 @@ export class UserRepository implements IUserRepository {
   async create(user: User): Promise<void> {
     await this.dataContext.execute(
       `INSERT INTO "user" 
-      (id, name, email, password)
+      (id, name, email, password, display_name, custom_preferences)
       VALUES 
-      ($1, $2, $3, $4);`,
-      [user.id, user.name, user.email, user.password]
+      ($1, $2, $3, $4, $5, $6);`,
+      [
+        user.id,
+        user.name,
+        user.email,
+        user.password,
+        user.displayName,
+        user.customPreferences,
+      ]
+    );
+  }
+
+  async update(id: string, user: NullablePartial<User>): Promise<void> {
+    let paramsCount = 0;
+
+    await this.dataContext.execute(
+      `UPDATE "user"
+      SET
+        ${user.name != null ? `name = $${++paramsCount},` : ""}
+        ${user.email != null ? `email = $${++paramsCount},` : ""}
+        ${user.password != null ? `password = $${++paramsCount},` : ""}
+        ${user.displayName != null ? `display_name = $${++paramsCount},` : ""}
+        ${
+          user.customPreferences != null
+            ? `custom_preferences = $${++paramsCount},`
+            : ""
+        }
+        ${user.customPreferences === null ? `custom_preferences = NULL,` : ""}
+        id = id
+      WHERE
+        id = $${++paramsCount};`,
+      [
+        user.name,
+        user.email,
+        user.password,
+        user.displayName,
+        user.customPreferences,
+        id,
+      ].filter((param) => param != null)
     );
   }
 }

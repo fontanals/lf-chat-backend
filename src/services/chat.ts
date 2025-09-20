@@ -6,7 +6,8 @@ import { Message } from "../models/entities/message";
 import {
   CreateChatRequest,
   DeleteChatParams,
-  GetChatMessagesParams,
+  GetChatParams,
+  GetChatQuery,
   GetChatsQuery,
   SendMessageParams,
   SendMessageRequest,
@@ -16,15 +17,20 @@ import {
 import {
   ChatServerSentEvent,
   DeleteChatResponse,
-  GetChatMessagesResponse,
+  GetChatResponse,
   GetChatsResponse,
   UpdateChatResponse,
 } from "../models/responses/chat";
 import { IChatRepository } from "../repositories/chat";
 import { IMessageRepository } from "../repositories/message";
 import { ApplicationError } from "../utils/errors";
-import { getQueryNumber } from "../utils/express";
-import { ValidationUtils } from "../utils/validation";
+import {
+  getQueryDate,
+  getQueryNumber,
+  getQueryString,
+  getQueryStringArray,
+  validateRequest,
+} from "../utils/express";
 import { IAssistantService } from "./assistant";
 import { AuthContext } from "./auth";
 
@@ -33,10 +39,11 @@ export interface IChatService {
     query: GetChatsQuery,
     authContext: AuthContext
   ): Promise<GetChatsResponse>;
-  getChatMessages(
-    params: GetChatMessagesParams,
+  getChat(
+    params: GetChatParams,
+    query: GetChatQuery,
     authContext: AuthContext
-  ): Promise<GetChatMessagesResponse>;
+  ): Promise<GetChatResponse>;
   createChat(
     request: CreateChatRequest,
     authContext: AuthContext,
@@ -81,34 +88,40 @@ export class ChatService implements IChatService {
     query: GetChatsQuery,
     authContext: AuthContext
   ): Promise<GetChatsResponse> {
-    const page = getQueryNumber(query.page, 1);
-    const pageSize = getQueryNumber(query.pageSize, 20);
+    const search = getQueryString(query.search);
+    const cursor = getQueryDate(query.cursor, new Date());
+    const limit = getQueryNumber(query.limit, 20);
 
-    const chats = await this.chatRepository.findAllPaginated(page, pageSize, {
-      userId: authContext.user.id,
-    });
+    const paginatedChats = await this.chatRepository.findAllPaginated(
+      cursor,
+      limit,
+      { title: search, userId: authContext.user.id }
+    );
 
-    return { chats };
+    return {
+      chats: paginatedChats.items,
+      totalChats: paginatedChats.totalItems,
+    };
   }
 
-  async getChatMessages(
-    params: GetChatMessagesParams,
+  async getChat(
+    params: GetChatParams,
+    query: GetChatQuery,
     authContext: AuthContext
-  ): Promise<GetChatMessagesResponse> {
-    const chatExists = await this.chatRepository.exists({
+  ): Promise<GetChatResponse> {
+    const expand = getQueryStringArray(query.expand);
+
+    const chat = await this.chatRepository.findOne({
       id: params.chatId,
       userId: authContext.user.id,
+      includeMessages: expand?.includes("messages"),
     });
 
-    if (!chatExists) {
+    if (chat == null) {
       throw ApplicationError.notFound();
     }
 
-    const messages = await this.messageRepository.findAll({
-      chatId: params.chatId,
-    });
-
-    return { messages };
+    return { chat };
   }
 
   async createChat(
@@ -116,10 +129,7 @@ export class ChatService implements IChatService {
     authContext: AuthContext,
     onSendEvent: (event: ChatServerSentEvent) => void
   ): Promise<void> {
-    ValidationUtils.validateRequest(
-      request,
-      z.object({ id: z.string(), message: z.string() })
-    );
+    validateRequest(request, z.object({ id: z.string(), message: z.string() }));
 
     const chat: Chat = {
       id: request.id,
@@ -182,6 +192,13 @@ export class ChatService implements IChatService {
 
     await this.messageRepository.create(assistantMessage);
 
+    const chatTitle = await this.assistantService.generateChatTitle([
+      userMessage,
+      assistantMessage,
+    ]);
+
+    await this.chatRepository.update(chat.id, { title: chatTitle });
+
     onSendEvent({
       event: "end",
       data: { messageId: assistantMessage.id },
@@ -195,10 +212,7 @@ export class ChatService implements IChatService {
     authContext: AuthContext,
     onSendEvent: (event: ChatServerSentEvent) => void
   ): Promise<void> {
-    ValidationUtils.validateRequest(
-      request,
-      z.object({ id: z.string(), content: z.string() })
-    );
+    validateRequest(request, z.object({ id: z.string(), content: z.string() }));
 
     const chatExists = await this.chatRepository.exists({
       id: params.chatId,
@@ -272,7 +286,7 @@ export class ChatService implements IChatService {
     request: UpdateChatRequest,
     authContext: AuthContext
   ): Promise<UpdateChatResponse> {
-    ValidationUtils.validateRequest(request, z.object({ title: z.string() }));
+    validateRequest(request, z.object({ title: z.string() }));
 
     const chatExists = await this.chatRepository.exists({
       id: params.chatId,

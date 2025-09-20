@@ -11,6 +11,7 @@ import { IUserRepository, UserRepository } from "./repositories/user";
 import { AssistantService, IAssistantService } from "./services/assistant";
 import { AuthService, IAuthService } from "./services/auth";
 import { ChatService, IChatService } from "./services/chat";
+import { IUserService, UserService } from "./services/user";
 
 type ServiceMap = {
   DataContext: IDataContext;
@@ -21,6 +22,7 @@ type ServiceMap = {
   MessageRepository: IMessageRepository;
   AssistantService: IAssistantService;
   AuthService: IAuthService;
+  UserService: IUserService;
   ChatService: IChatService;
 };
 
@@ -150,6 +152,15 @@ export function registerServices(services: ServiceContainer, pool: Pool) {
         services.get("UserRepository"),
         services.get("SessionRepository"),
         services.get("RefreshTokenRepository")
+      ),
+  });
+
+  services.register({
+    identifier: "UserService",
+    factory: (services) =>
+      new UserService(
+        services.get("DataContext"),
+        services.get("UserRepository")
       ),
   });
 

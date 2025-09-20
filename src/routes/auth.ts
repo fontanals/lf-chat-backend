@@ -1,42 +1,70 @@
-import { Request, Response } from "express";
-import { IServiceProvider } from "../service-provider";
+import { Router } from "express";
+import { authMiddleware } from "../middlewares/auth";
+import { ServiceContainer } from "../service-provider";
 import {
   refreshTokenCookieName,
   refreshTokenCookieOptions,
 } from "../utils/constants";
+import { jsonRequestHandler } from "../utils/express";
 
-export async function signup(
-  req: Request,
-  res: Response,
-  services: IServiceProvider
-) {
-  const authService = services.get("AuthService");
+export function createAuthRoutes(serviceContainer: ServiceContainer) {
+  const router = Router();
 
-  const { accessToken, refreshToken, response } = await authService.signup(
-    req.body
+  router.post(
+    "/signup",
+    jsonRequestHandler(serviceContainer, async (req, res, services) => {
+      const authService = services.get("AuthService");
+
+      const { accessToken, refreshToken, response } = await authService.signup(
+        req.body
+      );
+
+      res
+        .header("Authorization", `Bearer ${accessToken}`)
+        .cookie(
+          refreshTokenCookieName,
+          refreshToken,
+          refreshTokenCookieOptions
+        );
+
+      return response;
+    })
   );
 
-  res
-    .header("Authorization", `Bearer ${accessToken}`)
-    .cookie(refreshTokenCookieName, refreshToken, refreshTokenCookieOptions);
+  router.post(
+    "/signin",
+    jsonRequestHandler(serviceContainer, async (req, res, services) => {
+      const authService = services.get("AuthService");
 
-  return response;
-}
+      const { accessToken, refreshToken, response } = await authService.signin(
+        req.body
+      );
 
-export async function signin(
-  req: Request,
-  res: Response,
-  services: IServiceProvider
-) {
-  const authService = services.get("AuthService");
+      res
+        .header("Authorization", `Bearer ${accessToken}`)
+        .cookie(
+          refreshTokenCookieName,
+          refreshToken,
+          refreshTokenCookieOptions
+        );
 
-  const { accessToken, refreshToken, response } = await authService.signin(
-    req.body
+      return response;
+    })
   );
 
-  res
-    .header("Authorization", `Bearer ${accessToken}`)
-    .cookie(refreshTokenCookieName, refreshToken, refreshTokenCookieOptions);
+  router.post(
+    "/signout",
+    authMiddleware(serviceContainer),
+    jsonRequestHandler(serviceContainer, async (req, res, services) => {
+      const authService = services.get("AuthService");
 
-  return response;
+      const response = await authService.signout(req.authContext);
+
+      res.clearCookie(refreshTokenCookieName);
+
+      return response;
+    })
+  );
+
+  return router;
 }

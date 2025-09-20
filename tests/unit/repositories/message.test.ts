@@ -7,6 +7,13 @@ describe("MessageRepository", () => {
   let dataContext: jest.Mocked<IDataContext>;
   let messageRepository: MessageRepository;
 
+  const mockMessages: Message[] = Array.from({ length: 5 }, (_, index) => ({
+    id: randomUUID(),
+    role: index % 2 === 0 ? "user" : "assistant",
+    content: `message ${index + 1}`,
+    chatId: randomUUID(),
+  }));
+
   beforeEach(() => {
     dataContext = {
       query: jest.fn(),
@@ -29,21 +36,6 @@ describe("MessageRepository", () => {
     });
 
     it("should return messages", async () => {
-      const mockMessages: Message[] = [
-        {
-          id: randomUUID(),
-          role: "user",
-          content: "message",
-          chatId: randomUUID(),
-        },
-        {
-          id: randomUUID(),
-          role: "assistant",
-          content: "message",
-          chatId: randomUUID(),
-        },
-      ];
-
       dataContext.query.mockResolvedValue({ rows: mockMessages });
 
       const messages = await messageRepository.findAll();

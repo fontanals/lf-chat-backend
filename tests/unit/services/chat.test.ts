@@ -1,7 +1,8 @@
 import { randomUUID } from "crypto";
 import { IDataContext } from "../../../src/data/context";
 import { Chat } from "../../../src/models/entities/chat";
-import { Message } from "../../../src/models/entities/message";
+import { Session } from "../../../src/models/entities/session";
+import { mapUserToDto, User } from "../../../src/models/entities/user";
 import { IChatRepository } from "../../../src/repositories/chat";
 import { IMessageRepository } from "../../../src/repositories/message";
 import { IAssistantService } from "../../../src/services/assistant";
@@ -12,9 +13,6 @@ import {
   ApplicationErrorCode,
   HttpStatusCode,
 } from "../../../src/utils/errors";
-import { Paginated } from "../../../src/utils/types";
-import { UserDto } from "../../../src/models/entities/user";
-import { Session } from "../../../src/models/entities/session";
 
 describe("ChatService", () => {
   let dataContext: jest.Mocked<IDataContext>;
@@ -23,13 +21,22 @@ describe("ChatService", () => {
   let assistantService: jest.Mocked<IAssistantService>;
   let chatService: IChatService;
 
-  const user: UserDto = {
+  const user: User = {
     id: randomUUID(),
-    name: "name",
-    email: "email@example.com",
+    name: "user 1",
+    email: "user1@example.com",
+    password: "password",
+    displayName: "user",
+    customPreferences: null,
   };
-  const session: Session = { id: randomUUID(), userId: user.id };
-  const authContext: AuthContext = { session, user };
+  const chats: Chat[] = Array.from({ length: 5 }, (_, index) => ({
+    id: randomUUID(),
+    title: `chat ${index + 1}`,
+    userId: user.id,
+  }));
+  const userDto = mapUserToDto(user);
+  const session: Session = { id: randomUUID(), userId: userDto.id };
+  const authContext: AuthContext = { session, user: userDto };
 
   beforeEach(() => {
     dataContext = {
@@ -64,38 +71,26 @@ describe("ChatService", () => {
 
   describe("getChats", () => {
     it("should return all chats", async () => {
-      const userId = randomUUID();
-      const chats: Paginated<Chat> = {
-        items: [
-          { id: randomUUID(), title: "title", userId: userId },
-          { id: randomUUID(), title: "title", userId: userId },
-          { id: randomUUID(), title: "title", userId: userId },
-          { id: randomUUID(), title: "title", userId: userId },
-          { id: randomUUID(), title: "title", userId: userId },
-        ],
-        totalItems: 5,
-        page: 1,
-        totalPages: 1,
-        pageSize: 10,
-      };
-
-      chatRepository.findAllPaginated.mockResolvedValue(chats);
+      chatRepository.findAllPaginated.mockResolvedValue({
+        items: chats,
+        totalItems: chats.length,
+      });
 
       const response = await chatService.getChats({}, authContext);
 
-      expect(response).toEqual({ chats });
+      expect(response).toEqual({
+        chats: chats,
+        totalChats: chats.length,
+      });
     });
   });
 
-  describe("getChatMessages", () => {
+  describe("getChat", () => {
     it("should throw a not found error when chat does not exist", async () => {
-      chatRepository.exists.mockResolvedValue(false);
+      chatRepository.findOne.mockResolvedValue(null);
 
       try {
-        await chatService.getChatMessages(
-          { chatId: randomUUID() },
-          authContext
-        );
+        await chatService.getChat({ chatId: randomUUID() }, {}, authContext);
 
         fail("Expected to throw not found error");
       } catch (error) {
@@ -109,22 +104,18 @@ describe("ChatService", () => {
       }
     });
 
-    it("should return chat messages when chat exists", async () => {
-      const chatId = randomUUID();
-      const messages: Message[] = [
-        { id: randomUUID(), role: "user", content: "message", chatId },
-        { id: randomUUID(), role: "assistant", content: "message", chatId },
-      ];
+    it("should return chat", async () => {
+      const chat = chats[0];
 
-      chatRepository.exists.mockResolvedValue(true);
-      messageRepository.findAll.mockResolvedValue(messages);
+      chatRepository.findOne.mockResolvedValue(chat);
 
-      const response = await chatService.getChatMessages(
-        { chatId },
+      const response = await chatService.getChat(
+        { chatId: chat.id },
+        {},
         authContext
       );
 
-      expect(response).toEqual({ messages });
+      expect(response).toEqual({ chat });
     });
   });
 
@@ -337,17 +328,17 @@ describe("ChatService", () => {
     });
 
     it("should update chat title and return its id when chat exists", async () => {
+      const chat = chats[0];
+
       chatRepository.exists.mockResolvedValue(true);
 
-      const chatId = randomUUID();
-
       const response = await chatService.updateChat(
-        { chatId },
-        { title: "title" },
+        { chatId: chat.id },
+        { title: "chat 1 updated" },
         authContext
       );
 
-      expect(response).toEqual({ chatId });
+      expect(response).toEqual({ chatId: chat.id });
     });
   });
 
@@ -371,13 +362,16 @@ describe("ChatService", () => {
     });
 
     it("should delete chat and return its id when chat exists", async () => {
+      const chat = chats[0];
+
       chatRepository.exists.mockResolvedValue(true);
 
-      const chatId = randomUUID();
+      const response = await chatService.deleteChat(
+        { chatId: chat.id },
+        authContext
+      );
 
-      const response = await chatService.deleteChat({ chatId }, authContext);
-
-      expect(response).toEqual({ chatId });
+      expect(response).toEqual({ chatId: chat.id });
     });
   });
 });

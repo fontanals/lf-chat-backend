@@ -17,61 +17,24 @@ describe("ChatRepository", () => {
   const dataContext = new DataContext(pool);
   const chatRepository = new ChatRepository(dataContext);
 
-  const users: User[] = [
-    {
+  let chatNumber = 0;
+  const users: User[] = Array.from({ length: 3 }, (_, index) => ({
+    id: randomUUID(),
+    name: `user ${index + 1}`,
+    email: `user${index + 1}@example.com`,
+    password: "password",
+    displayName: "user",
+    customPreferences: null,
+    createdAt: addDays(new Date(), -index),
+  }));
+  const chats: Chat[] = users.flatMap((user, index) =>
+    Array.from({ length: index < 2 ? 5 : 0 }, () => ({
       id: randomUUID(),
-      name: "user 1",
-      email: "user1@example.com",
-      password: "password",
-      createdAt: addDays(new Date(), -14),
-    },
-    {
-      id: randomUUID(),
-      name: "user 2",
-      email: "user2@example.com",
-      password: "password",
-      createdAt: addDays(new Date(), -16),
-    },
-    {
-      id: randomUUID(),
-      name: "user 3",
-      email: "user3@example.com",
-      password: "password",
-      createdAt: addDays(new Date(), -13),
-    },
-  ];
-  const chats: Chat[] = [
-    {
-      id: randomUUID(),
-      title: "user 1 chat 1",
-      userId: users[0].id,
-      createdAt: addDays(new Date(), -1),
-    },
-    {
-      id: randomUUID(),
-      title: "user 1 chat 2",
-      userId: users[0].id,
-      createdAt: addDays(new Date(), -2),
-    },
-    {
-      id: randomUUID(),
-      title: "user 1 chat 3",
-      userId: users[0].id,
-      createdAt: addDays(new Date(), -3),
-    },
-    {
-      id: randomUUID(),
-      title: "user 2 chat 1",
-      userId: users[1].id,
-      createdAt: addDays(new Date(), -4),
-    },
-    {
-      id: randomUUID(),
-      title: "user 2 chat 2",
-      userId: users[1].id,
-      createdAt: addDays(new Date(), -5),
-    },
-  ];
+      title: `chat ${++chatNumber}`,
+      userId: user.id,
+      createdAt: addDays(new Date(), -chatNumber),
+    }))
+  );
 
   beforeAll(async () => {
     await insertUsers(users, pool);
@@ -92,17 +55,15 @@ describe("ChatRepository", () => {
 
   describe("exists", () => {
     it("should return false when chat does not exist", async () => {
-      const chatId = randomUUID();
-
-      const exists = await chatRepository.exists({ id: chatId });
+      const exists = await chatRepository.exists({ id: randomUUID() });
 
       expect(exists).toBe(false);
     });
 
     it("should return true when chat exists", async () => {
-      const chatId = chats[0].id;
+      const chat = chats[0];
 
-      const exists = await chatRepository.exists({ id: chatId });
+      const exists = await chatRepository.exists({ id: chat.id });
 
       expect(exists).toBe(true);
     });
@@ -113,99 +74,80 @@ describe("ChatRepository", () => {
       const databaseChats = await chatRepository.findAll();
 
       expect(databaseChats).toEqual(
-        chats
-          .sort(
-            (chatA, chatB) =>
-              (chatB.createdAt?.getTime() ?? 0) -
-              (chatA.createdAt?.getTime() ?? 0)
-          )
-          .map((chat) => expect.objectContaining(chat))
+        chats.sort(
+          (chatA, chatB) =>
+            (chatB.createdAt?.getTime() ?? 0) -
+            (chatA.createdAt?.getTime() ?? 0)
+        )
       );
     });
 
     it("should return an empty array when user has no chats", async () => {
-      const userId = users[2].id;
+      const user = users[2];
 
-      const databaseUserChats = await chatRepository.findAll({ userId });
+      const databaseChats = await chatRepository.findAll({ userId: user.id });
 
-      expect(databaseUserChats).toEqual([]);
+      expect(databaseChats).toEqual([]);
     });
 
-    it("should return all user chats ordered by creation date desc", async () => {
-      const userId = users[0].id;
+    it("should return user chats ordered by creation date desc", async () => {
+      const user = users[0];
 
-      const databaseUserChats = await chatRepository.findAll({ userId });
+      const databaseChats = await chatRepository.findAll({ userId: user.id });
 
-      expect(databaseUserChats).toEqual(
+      expect(databaseChats).toEqual(
         chats
-          .filter((chat) => chat.userId === userId)
+          .filter((chat) => chat.userId === user.id)
           .sort(
             (chatA, chatB) =>
               (chatB.createdAt?.getTime() ?? 0) -
               (chatA.createdAt?.getTime() ?? 0)
           )
-          .map((chat) => expect.objectContaining(chat))
       );
     });
   });
 
   describe("findAllPaginated", () => {
     it("should return empty pagination when user has no chats", async () => {
-      const userId = users[2].id;
-      const page = 1;
-      const pageSize = 50;
+      const user = users[2];
 
       const databasePaginatedUserChats = await chatRepository.findAllPaginated(
-        page,
-        pageSize,
-        { userId }
+        new Date(),
+        10,
+        { userId: user.id }
       );
 
-      expect(databasePaginatedUserChats).toEqual({
-        items: [],
-        totalItems: 0,
-        page,
-        pageSize,
-        totalPages: 1,
-      });
+      expect(databasePaginatedUserChats).toEqual({ items: [], totalItems: 0 });
     });
 
     it("should return user chats ordered by creation date desc paginated", async () => {
-      const userId = users[0].id;
-      const page = 2;
-      const pageSize = 2;
+      const user = users[0];
+      const limit = 2;
 
-      const databasePaginatedUserChats = await chatRepository.findAllPaginated(
-        page,
-        pageSize,
-        { userId }
+      const databaseChats = await chatRepository.findAllPaginated(
+        addDays(new Date(), -10),
+        limit,
+        { userId: user.id }
       );
 
       const sortedUserChats = chats
-        .filter((chat) => chat.userId === userId)
+        .filter((chat) => chat.userId === user.id)
         .sort(
           (chatA, chatB) =>
             (chatB.createdAt?.getTime() ?? 0) -
             (chatA.createdAt?.getTime() ?? 0)
         );
 
-      expect(databasePaginatedUserChats).toEqual({
-        items: sortedUserChats
-          .slice((page - 1) * pageSize, page * pageSize)
-          .map((chat) => expect.objectContaining(chat)),
+      expect(databaseChats).toEqual({
+        items: sortedUserChats.slice(0, limit),
         totalItems: sortedUserChats.length,
-        page,
-        pageSize,
-        totalPages: Math.ceil(sortedUserChats.length / pageSize),
       });
     });
   });
 
   describe("findOne", () => {
     it("should return null when chat does not exist", async () => {
-      const chatId = randomUUID();
-
-      const databaseChat = await chatRepository.findOne({ id: chatId });
+      const databaseChat = await chatRepository.findOne({ id: randomUUID() });
 
       expect(databaseChat).toBeNull();
     });
@@ -215,16 +157,18 @@ describe("ChatRepository", () => {
 
       const databaseChat = await chatRepository.findOne({ id: chat.id });
 
-      expect(databaseChat).toEqual(expect.objectContaining(chat));
+      expect(databaseChat).toEqual(chat);
     });
   });
 
   describe("create", () => {
     it("should create a new chat", async () => {
+      const user = users[0];
+
       const chat: Chat = {
         id: randomUUID(),
-        title: "title",
-        userId: users[0].id,
+        title: "new chat",
+        userId: user.id,
       };
 
       await chatRepository.create(chat);
@@ -232,28 +176,25 @@ describe("ChatRepository", () => {
       const databaseChats = await chatRepository.findAll();
 
       expect(databaseChats).toEqual(
-        expect.arrayContaining(
-          [...chats, chat].map((chat) => expect.objectContaining(chat))
-        )
+        expect.arrayContaining([...chats, expect.objectContaining(chat)])
       );
     });
   });
 
   describe("update", () => {
     it("should update chat title", async () => {
-      const chatId = chats[0].id;
-      const updatedChatTitle = "updated title";
+      const targetChat = chats[0];
 
-      await chatRepository.update(chatId, { title: updatedChatTitle });
+      await chatRepository.update(targetChat.id, { title: "chat 1 updated" });
 
       const databaseChats = await chatRepository.findAll();
 
       expect(databaseChats).toEqual(
         expect.arrayContaining(
           chats.map((chat) =>
-            chat.id === chatId
-              ? expect.objectContaining({ ...chat, title: updatedChatTitle })
-              : expect.objectContaining(chat)
+            chat.id === targetChat.id
+              ? { ...chat, title: "chat 1 updated" }
+              : chat
           )
         )
       );
@@ -266,25 +207,19 @@ describe("ChatRepository", () => {
 
       const databaseChats = await chatRepository.findAll();
 
-      expect(databaseChats).toEqual(
-        expect.arrayContaining(
-          chats.map((chat) => expect.objectContaining(chat))
-        )
-      );
+      expect(databaseChats).toEqual(expect.arrayContaining(chats));
     });
 
     it("should delete chat", async () => {
-      const chatId = chats[0].id;
+      const targetChat = chats[0];
 
-      await chatRepository.delete(chatId);
+      await chatRepository.delete(targetChat.id);
 
       const databaseChats = await chatRepository.findAll();
 
       expect(databaseChats).toEqual(
         expect.arrayContaining(
-          chats
-            .filter((chat) => chat.id !== chatId)
-            .map((chat) => expect.objectContaining(chat))
+          chats.filter((chat) => chat.id !== targetChat.id)
         )
       );
     });

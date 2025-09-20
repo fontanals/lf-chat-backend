@@ -4,31 +4,26 @@ import { Express, json } from "express";
 import { Server } from "node:http";
 import { Pool } from "pg";
 import { config } from "./config";
-import { authMiddleware } from "./middlewares/auth";
-import { signin, signup } from "./routes/auth";
-import {
-  createChat,
-  deleteChat,
-  getChatMessages,
-  getChats,
-  sendMessage,
-  updateChat,
-} from "./routes/chat";
+import { createAuthRoutes } from "./routes/auth";
+import { createChatRoutes } from "./routes/chat";
+import { createUserRoutes } from "./routes/user";
 import { registerServices, ServiceContainer } from "./service-provider";
 import { NumberUtils } from "./utils/numbers";
-import { jsonRequestHandler, sseRequestHandler } from "./utils/express";
+import { authMiddleware } from "./middlewares/auth";
 
 export class Application {
   private readonly server: Server;
   private readonly pool: Pool;
-  public readonly services = new ServiceContainer();
+  readonly serviceContainer = new ServiceContainer();
 
   constructor(expressApp: Express, pool: Pool) {
     this.pool = pool;
 
-    registerServices(this.services, pool);
+    registerServices(this.serviceContainer, pool);
 
-    expressApp.use(cors());
+    expressApp.use(
+      cors({ origin: "http://localhost:5173", credentials: true })
+    );
     expressApp.use(cookieParser());
     expressApp.use(json());
 
@@ -62,37 +57,16 @@ export class Application {
       res.json({ message: "Welcome to the AI Chat API.", version: "1.0.0" });
     });
 
-    expressApp.post("/api/signup", jsonRequestHandler(this.services, signup));
-    expressApp.post("/api/signin", jsonRequestHandler(this.services, signin));
-    expressApp.get(
+    expressApp.use("/api", createAuthRoutes(this.serviceContainer));
+    expressApp.use(
+      "/api/user",
+      authMiddleware(this.serviceContainer),
+      createUserRoutes(this.serviceContainer)
+    );
+    expressApp.use(
       "/api/chats",
-      authMiddleware(this.services),
-      jsonRequestHandler(this.services, getChats)
-    );
-    expressApp.get(
-      "/api/chats/:chatId/messages",
-      authMiddleware(this.services),
-      jsonRequestHandler(this.services, getChatMessages)
-    );
-    expressApp.post(
-      "/api/chats",
-      authMiddleware(this.services),
-      sseRequestHandler(this.services, createChat)
-    );
-    expressApp.post(
-      "/api/chats/:chatId/messages",
-      authMiddleware(this.services),
-      sseRequestHandler(this.services, sendMessage)
-    );
-    expressApp.patch(
-      "/api/chats/:chatId",
-      authMiddleware(this.services),
-      jsonRequestHandler(this.services, updateChat)
-    );
-    expressApp.delete(
-      "/api/chats/:chatId",
-      authMiddleware(this.services),
-      jsonRequestHandler(this.services, deleteChat)
+      authMiddleware(this.serviceContainer),
+      createChatRoutes(this.serviceContainer)
     );
   }
 }

@@ -1,11 +1,27 @@
 import { randomUUID } from "crypto";
 import { IDataContext } from "../../../src/data/context";
 import { Chat } from "../../../src/models/entities/chat";
+import { Message } from "../../../src/models/entities/message";
 import { ChatRepository } from "../../../src/repositories/chat";
 
 describe("ChatRepository", () => {
   let dataContext: jest.Mocked<IDataContext>;
   let chatRepository: ChatRepository;
+
+  let messageNumber = 0;
+  const mockChats: Chat[] = Array.from({ length: 5 }, (_, index) => ({
+    id: randomUUID(),
+    title: `chat ${index + 1}`,
+    userId: randomUUID(),
+  }));
+  const mockMessages: Message[] = mockChats.flatMap((chat) =>
+    Array.from({ length: 4 }, (_, index) => ({
+      id: randomUUID(),
+      role: index % 2 === 0 ? "user" : "assistant",
+      content: `message ${++messageNumber}`,
+      chatId: chat.id,
+    }))
+  );
 
   beforeEach(() => {
     dataContext = {
@@ -29,11 +45,7 @@ describe("ChatRepository", () => {
     });
 
     it("should return true when a chat is found", async () => {
-      const mockChat: Chat = {
-        id: randomUUID(),
-        title: "title",
-        userId: randomUUID(),
-      };
+      const mockChat = mockChats[0];
 
       dataContext.query.mockResolvedValue({ rows: [mockChat] });
 
@@ -52,67 +64,119 @@ describe("ChatRepository", () => {
       expect(chats).toEqual([]);
     });
 
-    it("should return chats when chats are", async () => {
-      const mockChats: Chat[] = [
-        { id: randomUUID(), title: "title", userId: randomUUID() },
-        { id: randomUUID(), title: "title", userId: randomUUID() },
-      ];
-
-      dataContext.query.mockResolvedValue({ rows: mockChats });
+    it("should return chats", async () => {
+      dataContext.query.mockResolvedValue({
+        rows: mockChats.map((chat) => ({
+          chatId: chat.id,
+          chatTitle: chat.title,
+          chatUserId: chat.userId,
+        })),
+      });
 
       const chats = await chatRepository.findAll();
 
       expect(chats).toEqual(mockChats);
     });
+
+    it("should return chats including messages", async () => {
+      dataContext.query.mockResolvedValue({
+        rows: mockChats.flatMap((chat) => {
+          const messages = mockMessages.filter(
+            (message) => message.chatId === chat.id
+          );
+
+          return messages.map((message) => ({
+            chatId: chat.id,
+            chatTitle: chat.title,
+            chatUserId: chat.userId,
+            messageId: message.id,
+            messageRole: message.role,
+            messageContent: message.content,
+            messageChatId: message.chatId,
+          }));
+        }),
+      });
+
+      const chats = await chatRepository.findAll({ includeMessages: true });
+
+      expect(chats).toEqual(
+        mockChats.map((chat) => ({
+          ...chat,
+          messages: mockMessages.filter(
+            (message) => message.chatId === chat.id
+          ),
+        }))
+      );
+    });
   });
 
   describe("findAllPaginated", () => {
     it("should return an empty pagination when no chats are found", async () => {
-      const page = 1;
-      const pageSize = 10;
-
       dataContext.query.mockResolvedValue({ rows: [] });
 
-      const pagination = await chatRepository.findAllPaginated(page, pageSize);
+      const paginatedChats = await chatRepository.findAllPaginated(
+        new Date(),
+        20
+      );
 
-      expect(pagination).toEqual({
-        items: [],
-        totalItems: 0,
-        page,
-        pageSize,
-        totalPages: 1,
+      expect(paginatedChats).toEqual({ items: [], totalItems: 0 });
+    });
+
+    it("should return chats paginated", async () => {
+      dataContext.query.mockResolvedValue({
+        rows: mockChats.map((chat) => ({
+          chatId: chat.id,
+          chatTitle: chat.title,
+          chatUserId: chat.userId,
+          totalItems: mockChats.length,
+        })),
+      });
+
+      const paginatedChats = await chatRepository.findAllPaginated(
+        new Date(),
+        20
+      );
+
+      expect(paginatedChats).toEqual({
+        items: mockChats,
+        totalItems: mockChats.length,
       });
     });
 
-    it("should return paginated chats", async () => {
-      const page = 1;
-      const pageSize = 10;
+    it("should return chats paginated including messages", async () => {
+      dataContext.query.mockResolvedValue({
+        rows: mockChats.flatMap((chat) => {
+          const messages = mockMessages.filter(
+            (message) => message.chatId === chat.id
+          );
 
-      const mockChats: (Chat & { totalItems: number })[] = [
-        {
-          id: randomUUID(),
-          title: "title",
-          userId: randomUUID(),
-          totalItems: 2,
-        },
-        {
-          id: randomUUID(),
-          title: "title",
-          userId: randomUUID(),
-          totalItems: 2,
-        },
-      ];
+          return messages.map((message) => ({
+            chatId: chat.id,
+            chatTitle: chat.title,
+            chatUserId: chat.userId,
+            messageId: message.id,
+            messageRole: message.role,
+            messageContent: message.content,
+            messageChatId: message.chatId,
+            totalItems: mockChats.length,
+          }));
+        }),
+      });
 
-      dataContext.query.mockResolvedValue({ rows: mockChats });
+      const paginatedChats = await chatRepository.findAllPaginated(
+        new Date(),
+        20,
+        { includeMessages: true }
+      );
 
-      const pagination = await chatRepository.findAllPaginated(page, pageSize);
-
-      expect(pagination).toEqual({
-        items: mockChats,
+      expect(paginatedChats).toEqual({
+        items: mockChats.map((chat) => ({
+          ...chat,
+          messages: mockMessages.filter(
+            (message) => message.chatId === chat.id
+          ),
+        })),
         totalItems: mockChats.length,
-        page,
-        pageSize,
-        totalPages: 1,
       });
     });
   });
@@ -127,17 +191,48 @@ describe("ChatRepository", () => {
     });
 
     it("should return chat", async () => {
-      const mockChat: Chat = {
-        id: randomUUID(),
-        title: "title",
-        userId: randomUUID(),
-      };
+      const mockChat = mockChats[0];
 
-      dataContext.query.mockResolvedValue({ rows: [mockChat] });
+      dataContext.query.mockResolvedValue({
+        rows: [
+          {
+            chatId: mockChat.id,
+            chatTitle: mockChat.title,
+            chatUserId: mockChat.userId,
+          },
+        ],
+      });
 
       const chat = await chatRepository.findOne();
 
       expect(chat).toEqual(mockChat);
+    });
+
+    it("should return chat including messages", async () => {
+      const mockChat = mockChats[0];
+
+      dataContext.query.mockResolvedValue({
+        rows: mockMessages
+          .filter((message) => message.chatId === mockChat.id)
+          .map((message) => ({
+            chatId: mockChat.id,
+            chatTitle: mockChat.title,
+            chatUserId: mockChat.userId,
+            messageId: message.id,
+            messageRole: message.role,
+            messageContent: message.content,
+            messageChatId: message.chatId,
+          })),
+      });
+
+      const chat = await chatRepository.findOne({ includeMessages: true });
+
+      expect(chat).toEqual({
+        ...mockChat,
+        messages: mockMessages.filter(
+          (message) => message.chatId === mockChat.id
+        ),
+      });
     });
   });
 });

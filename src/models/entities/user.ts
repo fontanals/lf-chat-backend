@@ -3,6 +3,8 @@ export type User = {
   name: string;
   email: string;
   password: string;
+  displayName: string;
+  customPreferences?: string | null;
   createdAt?: Date;
 };
 
@@ -13,6 +15,8 @@ export function mapUserToDto(user: User): UserDto {
     id: user.id,
     name: user.name,
     email: user.email,
+    displayName: user.displayName,
+    customPreferences: user.customPreferences,
     createdAt: user.createdAt,
   };
 }

@@ -64,4 +64,16 @@ describe("ApplicationError", () => {
       ApplicationErrorCode.InvalidEmailOrPassword
     );
   });
+
+  it("should create a user message violates content policy error", () => {
+    const error = ApplicationError.userMessageViolatesContentPolicy();
+
+    expect(error).toBeInstanceOf(ApplicationError);
+    expect((error as ApplicationError).statusCode).toBe(
+      HttpStatusCode.BadRequest
+    );
+    expect((error as ApplicationError).code).toBe(
+      ApplicationErrorCode.UserMessageViolatesContentPolicy
+    );
+  });
 });

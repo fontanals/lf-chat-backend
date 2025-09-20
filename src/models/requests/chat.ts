@@ -1,9 +1,12 @@
 export type GetChatsQuery = {
-  page?: string;
-  pageSize?: string;
+  search?: string;
+  cursor?: string;
+  limit?: string;
 };
 
-export type GetChatMessagesParams = { chatId: string };
+export type GetChatParams = { chatId: string };
+
+export type GetChatQuery = { expand?: string[] };
 
 export type CreateChatRequest = { id: string; message: string };
 

@@ -9,12 +9,16 @@ import { RefreshToken } from "../models/entities/refresh-token";
 import { Session } from "../models/entities/session";
 import { mapUserToDto, User, UserDto } from "../models/entities/user";
 import { SigninRequest, SignupRequest } from "../models/requests/auth";
-import { SigninReponse, SignupResponse } from "../models/responses/auth";
+import {
+  SigninReponse,
+  SignoutResponse,
+  SignupResponse,
+} from "../models/responses/auth";
 import { IRefreshTokenRepository } from "../repositories/refresh-token";
 import { ISessionRepository } from "../repositories/session";
 import { IUserRepository } from "../repositories/user";
 import { ApplicationError } from "../utils/errors";
-import { ValidationUtils } from "../utils/validation";
+import { validateRequest } from "../utils/express";
 
 export type AuthContext = { session: Session; user: UserDto };
 
@@ -35,6 +39,7 @@ type WithTokens<TResponse> = {
 type ValidateAccessTokenResponse =
   | { isValid: true; authContext: AuthContext }
   | { isValid: false };
+
 type RefreshTokenResponse =
   | {
       isValid: true;
@@ -47,6 +52,7 @@ type RefreshTokenResponse =
 export interface IAuthService {
   signup(request: SignupRequest): Promise<WithTokens<SignupResponse>>;
   signin(request: SigninRequest): Promise<WithTokens<SigninReponse>>;
+  signout(authContext: AuthContext): Promise<SignoutResponse>;
   validateAccessToken(accessToken: string): ValidateAccessTokenResponse;
   refreshToken(refreshToken: string): Promise<RefreshTokenResponse>;
 }
@@ -70,7 +76,7 @@ export class AuthService implements IAuthService {
   }
 
   async signup(request: SignupRequest): Promise<WithTokens<SignupResponse>> {
-    ValidationUtils.validateRequest(
+    validateRequest(
       request,
       z.object({
         name: z.string(),
@@ -96,6 +102,8 @@ export class AuthService implements IAuthService {
       name: request.name,
       email: request.email,
       password: hashedPassword,
+      displayName: request.name.split(" ")[0],
+      customPreferences: null,
     };
 
     const session: Session = { id: randomUUID(), userId: user.id };
@@ -138,7 +146,7 @@ export class AuthService implements IAuthService {
   }
 
   async signin(request: SigninRequest): Promise<WithTokens<SigninReponse>> {
-    ValidationUtils.validateRequest(
+    validateRequest(
       request,
       z.object({ email: z.email(), password: z.string() })
     );
@@ -193,6 +201,12 @@ export class AuthService implements IAuthService {
       await this.dataContext.rollback();
       throw error;
     }
+  }
+
+  async signout(authContext: AuthContext): Promise<SignoutResponse> {
+    await this.refreshTokenRepository.revokeSession(authContext.session.id);
+
+    return { userId: authContext.user.id };
   }
 
   validateAccessToken(accessToken: string): ValidateAccessTokenResponse {

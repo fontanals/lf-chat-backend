@@ -8,12 +8,9 @@ export type NullablePartial<T> = {
   [K in keyof T]?: T[K] | null;
 };
 
-export type Paginated<T> = {
-  items: T[];
+export type CursorPagination<TItem> = {
+  items: TItem[];
   totalItems: number;
-  page: number;
-  pageSize: number;
-  totalPages: number;
 };
 
 export type ServerSentEvent<TEvent = string, TData = unknown> = {

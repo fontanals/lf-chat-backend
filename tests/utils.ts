@@ -21,14 +21,16 @@ export function createTestPool() {
 export async function insertUsers(users: User[], pool: Pool) {
   await pool.query(
     `INSERT INTO "user"
-    (id, name, email, password, created_at)
+    (id, name, email, password, display_name, custom_preferences, created_at)
     VALUES
-    ${SqlUtils.values(users.length, 5)};`,
+    ${SqlUtils.values(users.length, 7)};`,
     users.flatMap((user) => [
       user.id,
       user.name,
       user.email,
       user.password,
+      user.displayName,
+      user.customPreferences,
       user.createdAt,
     ])
   );

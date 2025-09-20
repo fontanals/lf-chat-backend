@@ -1,5 +1,5 @@
 import { randomUUID } from "crypto";
-import { addDays } from "date-fns";
+import { addDays, addSeconds } from "date-fns";
 import { DataContext } from "../../../src/data/context";
 import { Chat } from "../../../src/models/entities/chat";
 import { Message } from "../../../src/models/entities/message";
@@ -19,66 +19,34 @@ describe("MessageRepository", () => {
   const dataContext = new DataContext(pool);
   const messageRepository = new MessageRepository(dataContext);
 
-  const users: User[] = [
-    {
+  let chatNumber = 0;
+  let messageNumber = 0;
+  const users: User[] = Array.from({ length: 2 }, (_, index) => ({
+    id: randomUUID(),
+    name: `user ${index + 1}`,
+    email: `user${index + 1}@example.com`,
+    password: "password",
+    displayName: "user",
+    customPreferences: null,
+    createdAt: addDays(new Date(), -index - 25),
+  }));
+  const chats: Chat[] = users.flatMap((user) =>
+    Array.from({ length: 5 }, () => ({
       id: randomUUID(),
-      name: "user 1",
-      email: "user1@example.com",
-      password: "password",
-      createdAt: addDays(new Date(), -6),
-    },
-    {
+      title: `chat ${++chatNumber}`,
+      userId: user.id,
+      createdAt: addDays(user.createdAt!, -chatNumber),
+    }))
+  );
+  const messages: Message[] = chats.flatMap((chat) =>
+    Array.from({ length: 4 }, (_, index) => ({
       id: randomUUID(),
-      name: "user 2",
-      email: "user2@example.com",
-      password: "password",
-      createdAt: addDays(new Date(), -5),
-    },
-  ];
-  const chats: Chat[] = [
-    {
-      id: randomUUID(),
-      title: "user 1 chat",
-      userId: users[0].id,
-      createdAt: addDays(new Date(), -1),
-    },
-    {
-      id: randomUUID(),
-      title: "user 2 chat",
-      userId: users[1].id,
-      createdAt: addDays(new Date(), -2),
-    },
-  ];
-  const messages: Message[] = [
-    {
-      id: randomUUID(),
-      role: "user",
-      content: "message",
-      chatId: chats[0].id,
-      createdAt: addDays(new Date(), -1),
-    },
-    {
-      id: randomUUID(),
-      role: "assistant",
-      content: "message",
-      chatId: chats[0].id,
-      createdAt: addDays(new Date(), -1),
-    },
-    {
-      id: randomUUID(),
-      role: "user",
-      content: "message",
-      chatId: chats[1].id,
-      createdAt: addDays(new Date(), -2),
-    },
-    {
-      id: randomUUID(),
-      role: "assistant",
-      content: "message",
-      chatId: chats[1].id,
-      createdAt: addDays(new Date(), -2),
-    },
-  ];
+      role: index % 2 === 0 ? "user" : "assistant",
+      content: `message ${++messageNumber}`,
+      chatId: chat.id,
+      createdAt: addSeconds(chat.createdAt!, messageNumber * 10),
+    }))
+  );
 
   beforeAll(async () => {
     await insertUsers(users, pool);
@@ -103,43 +71,42 @@ describe("MessageRepository", () => {
       const databaseMessages = await messageRepository.findAll();
 
       expect(databaseMessages).toEqual(
-        messages
-          .sort(
-            (messageA, messageB) =>
-              (messageA.createdAt?.getTime() ?? 0) -
-              (messageB.createdAt?.getTime() ?? 0)
-          )
-          .map((message) => expect.objectContaining(message))
+        messages.sort(
+          (messageA, messageB) =>
+            (messageA.createdAt?.getTime() ?? 0) -
+            (messageB.createdAt?.getTime() ?? 0)
+        )
       );
     });
 
     it("should return chat messages ordered by creation date asc", async () => {
-      const chatId = chats[0].id;
+      const chat = chats[0];
 
-      const databaseMessages = await messageRepository.findAll({ chatId });
+      const databaseMessages = await messageRepository.findAll({
+        chatId: chat.id,
+      });
 
       expect(databaseMessages).toEqual(
         messages
-          .filter((message) => message.chatId === chatId)
+          .filter((message) => message.chatId === chat.id)
           .sort(
             (messageA, messageB) =>
               (messageA.createdAt?.getTime() ?? 0) -
               (messageB.createdAt?.getTime() ?? 0)
           )
-          .map((message) => expect.objectContaining(message))
       );
     });
   });
 
   describe("create", () => {
     it("should create a new message", async () => {
-      const chatId = chats[0].id;
+      const chat = chats[0];
 
       const message: Message = {
         id: randomUUID(),
         role: "user",
-        content: "message",
-        chatId,
+        content: "new message",
+        chatId: chat.id,
       };
 
       await messageRepository.create(message);
@@ -147,11 +114,14 @@ describe("MessageRepository", () => {
       const databaseMessages = await messageRepository.findAll();
 
       expect(databaseMessages).toEqual(
-        expect.arrayContaining(
-          [...messages, message].map((message) =>
-            expect.objectContaining(message)
-          )
-        )
+        expect.arrayContaining([
+          ...messages.sort(
+            (messageA, messageB) =>
+              (messageA.createdAt?.getTime() ?? 0) -
+              (messageB.createdAt?.getTime() ?? 0)
+          ),
+          expect.objectContaining(message),
+        ])
       );
     });
   });
