@@ -1,6 +1,7 @@
 import { Router } from "express";
 import {
   DeleteChatParams,
+  GetChatMessagesParams,
   GetChatParams,
   SendMessageParams,
   UpdateChatParams,
@@ -29,7 +30,20 @@ export function createChatRoutes(serviceContainer: ServiceContainer) {
 
       const response = await chatService.getChat(
         req.params as GetChatParams,
-        req.query,
+        req.authContext
+      );
+
+      return response;
+    })
+  );
+
+  router.get(
+    "/:chatId/messages",
+    jsonRequestHandler(serviceContainer, async (req, res, services) => {
+      const chatService = services.get("ChatService");
+
+      const response = await chatService.getChatMessages(
+        req.params as GetChatMessagesParams,
         req.authContext
       );
 

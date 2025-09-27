@@ -6,8 +6,8 @@ import { Message } from "../models/entities/message";
 import {
   CreateChatRequest,
   DeleteChatParams,
+  GetChatMessagesParams,
   GetChatParams,
-  GetChatQuery,
   GetChatsQuery,
   SendMessageParams,
   SendMessageRequest,
@@ -17,6 +17,7 @@ import {
 import {
   ChatServerSentEvent,
   DeleteChatResponse,
+  GetChatMessagesResponse,
   GetChatResponse,
   GetChatsResponse,
   UpdateChatResponse,
@@ -28,7 +29,6 @@ import {
   getQueryDate,
   getQueryNumber,
   getQueryString,
-  getQueryStringArray,
   validateRequest,
 } from "../utils/express";
 import { IAssistantService } from "./assistant";
@@ -41,9 +41,12 @@ export interface IChatService {
   ): Promise<GetChatsResponse>;
   getChat(
     params: GetChatParams,
-    query: GetChatQuery,
     authContext: AuthContext
   ): Promise<GetChatResponse>;
+  getChatMessages(
+    params: GetChatMessagesParams,
+    authContext: AuthContext
+  ): Promise<GetChatMessagesResponse>;
   createChat(
     request: CreateChatRequest,
     authContext: AuthContext,
@@ -106,22 +109,67 @@ export class ChatService implements IChatService {
 
   async getChat(
     params: GetChatParams,
-    query: GetChatQuery,
     authContext: AuthContext
   ): Promise<GetChatResponse> {
-    const expand = getQueryStringArray(query.expand);
-
     const chat = await this.chatRepository.findOne({
       id: params.chatId,
       userId: authContext.user.id,
-      includeMessages: expand?.includes("messages"),
     });
 
     if (chat == null) {
       throw ApplicationError.notFound();
     }
 
-    return { chat };
+    return chat;
+  }
+
+  async getChatMessages(
+    params: GetChatMessagesParams,
+    authContext: AuthContext
+  ): Promise<GetChatMessagesResponse> {
+    const chatExists = await this.chatRepository.exists({
+      id: params.chatId,
+      userId: authContext.user.id,
+    });
+
+    if (!chatExists) {
+      throw ApplicationError.notFound();
+    }
+
+    const messages = await this.messageRepository.findAll({
+      chatId: params.chatId,
+    });
+
+    const latestPath: string[] = [];
+    const rootMessageIds: string[] = [];
+    const messagesMap: Record<string, Message> = {};
+
+    messages.forEach((message) => {
+      message.childrenIds = [];
+      messagesMap[message.id] = message;
+
+      if (message.parentId != null) {
+        const parentMessage = messagesMap[message.parentId];
+
+        if (parentMessage != null) {
+          parentMessage.childrenIds!.push(message.id);
+        }
+      } else {
+        rootMessageIds.push(message.id);
+      }
+    });
+
+    let currentMessage = messages[messages.length - 1] as Message | undefined;
+
+    while (currentMessage != null) {
+      latestPath.unshift(currentMessage.id);
+      currentMessage =
+        currentMessage.parentId != null
+          ? messagesMap[currentMessage.parentId]
+          : undefined;
+    }
+
+    return { latestPath, rootMessageIds, messages: messagesMap };
   }
 
   async createChat(
@@ -141,6 +189,7 @@ export class ChatService implements IChatService {
       id: request.id,
       role: "user",
       content: request.message,
+      parentId: null,
       chatId: chat.id,
     };
 
@@ -156,6 +205,7 @@ export class ChatService implements IChatService {
       id: randomUUID(),
       role: "assistant",
       content: "",
+      parentId: userMessage.id,
       chatId: chat.id,
     };
 
@@ -227,6 +277,7 @@ export class ChatService implements IChatService {
       id: request.id,
       role: "user",
       content: request.content,
+      parentId: request.parentId,
       chatId: params.chatId,
     };
 
@@ -242,6 +293,7 @@ export class ChatService implements IChatService {
       id: randomUUID(),
       role: "assistant",
       content: "",
+      parentId: userMessage.id,
       chatId: params.chatId,
     };
 
@@ -299,7 +351,7 @@ export class ChatService implements IChatService {
 
     await this.chatRepository.update(params.chatId, { title: request.title });
 
-    return { chatId: params.chatId };
+    return params.chatId;
   }
 
   async deleteChat(
@@ -317,6 +369,6 @@ export class ChatService implements IChatService {
 
     await this.chatRepository.delete(params.chatId);
 
-    return { chatId: params.chatId };
+    return params.chatId;
   }
 }

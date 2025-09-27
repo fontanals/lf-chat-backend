@@ -206,7 +206,7 @@ export class AuthService implements IAuthService {
   async signout(authContext: AuthContext): Promise<SignoutResponse> {
     await this.refreshTokenRepository.revokeSession(authContext.session.id);
 
-    return { userId: authContext.user.id };
+    return authContext.user.id;
   }
 
   validateAccessToken(accessToken: string): ValidateAccessTokenResponse {

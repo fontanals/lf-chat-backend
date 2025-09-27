@@ -36,7 +36,7 @@ export class UserService implements IUserService {
 
     const userDto = mapUserToDto(user);
 
-    return { user: userDto };
+    return userDto;
   }
 
   async updateUser(
@@ -66,6 +66,6 @@ export class UserService implements IUserService {
       customPreferences: request.customPreferences,
     });
 
-    return { userId: authContext.user.id };
+    return authContext.user.id;
   }
 }

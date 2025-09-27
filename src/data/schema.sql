@@ -37,5 +37,6 @@ CREATE TABLE "message" (
     "role" message_role NOT NULL,
     "content" text NOT NULL,
     "created_at" timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "parent_id" uuid REFERENCES "message"("id") ON DELETE CASCADE,
     "chat_id" uuid NOT NULL REFERENCES "chat"("id") ON DELETE CASCADE
 );

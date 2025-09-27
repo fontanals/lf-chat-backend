@@ -1,22 +1,9 @@
 import { IDataContext } from "../data/context";
 import { Chat } from "../models/entities/chat";
-import { Message, MessageRole } from "../models/entities/message";
 import { ArrayUtils } from "../utils/arrays";
 import { CursorPagination, NullablePartial } from "../utils/types";
 
-type ChatFilters = NullablePartial<Chat & { includeMessages: boolean }>;
-
-type ChatQueryRow = {
-  chatId: string;
-  chatTitle: string;
-  chatUserId: string;
-  chatCreatedAt?: Date;
-  messageId: string;
-  messageRole: MessageRole;
-  messageContent: string;
-  messageChatId: string;
-  messageCreatedAt?: Date;
-};
+type ChatFilters = NullablePartial<Chat>;
 
 export interface IChatRepository {
   exists(filters?: ChatFilters): Promise<boolean>;
@@ -66,28 +53,13 @@ export class ChatRepository implements IChatRepository {
   async findAll(filters?: ChatFilters): Promise<Chat[]> {
     let paramsCount = 0;
 
-    const result = await this.dataContext.query<ChatQueryRow>(
+    const result = await this.dataContext.query<Chat>(
       `SELECT
-        chat.id AS "chatId",
-        chat.title AS "chatTitle",
-        chat.user_id AS "chatUserId",
-        chat.created_at AS "chatCreatedAt",
-        ${
-          filters?.includeMessages
-            ? `message.id AS "messageId",
-              message.role AS "messageRole",
-              message.content AS "messageContent",
-              message.chat_id AS "messageChatId",
-              message.created_at AS "messageCreatedAt",`
-            : ""
-        }
-        TRUE
+        id,
+        title,
+        user_id AS "userId",
+        created_at AS "createdAt"
       FROM "chat"
-      ${
-        filters?.includeMessages
-          ? `LEFT JOIN "message" ON message.chat_id = chat.id`
-          : ""
-      }
       WHERE
         ${filters?.id != null ? `chat.id = $${++paramsCount} AND` : ""}
         ${
@@ -95,7 +67,7 @@ export class ChatRepository implements IChatRepository {
         }
         ${filters?.userId != null ? `chat.user_id = $${++paramsCount} AND` : ""}
         TRUE
-      ORDER BY chat.created_at DESC;`,
+      ORDER BY created_at DESC;`,
       [
         filters?.id,
         filters?.title != null ? `%${filters.title}%` : null,
@@ -103,12 +75,7 @@ export class ChatRepository implements IChatRepository {
       ].filter((param) => param != null)
     );
 
-    const chats = this.mapRowsToChats(
-      result.rows,
-      Boolean(filters?.includeMessages)
-    );
-
-    return chats;
+    return result.rows;
   }
 
   async findAllPaginated(
@@ -118,9 +85,7 @@ export class ChatRepository implements IChatRepository {
   ): Promise<CursorPagination<Chat>> {
     let paramsCount = 0;
 
-    const result = await this.dataContext.query<
-      ChatQueryRow & { totalItems: number }
-    >(
+    const result = await this.dataContext.query<Chat & { totalItems: number }>(
       `WITH "chat_cte" AS (
         SELECT
           *,
@@ -134,32 +99,15 @@ export class ChatRepository implements IChatRepository {
         ORDER BY created_at DESC
       )
       SELECT
-        chat_cte.id AS "chatId",
-        chat_cte.title AS "chatTitle",
-        chat_cte.user_id AS "chatUserId",
-        chat_cte.created_at AS "chatCreatedAt",
-        chat_cte.total_items AS "totalItems",
-        ${
-          filters?.includeMessages
-            ? `message.id AS "messageId",
-              message.role AS "messageRole",
-              message.content AS "messageContent",
-              message.chat_id AS "messageChatId",
-              message.created_at AS "messageCreatedAt",`
-            : ""
-        }
-        TRUE
+        id,
+        title,
+        user_id AS "userId",
+        created_at AS "createdAt",
+        total_items AS "totalItems"
       FROM "chat_cte"
-      ${
-        filters?.includeMessages
-          ? `LEFT JOIN "message" ON message.chat_id = chat_cte.id`
-          : ""
-      }
       WHERE
-        chat_cte.created_at < $${++paramsCount}
-      ORDER BY 
-        chat_cte.created_at DESC 
-        ${filters?.includeMessages ? ", message.created_at" : ""}
+        created_at < $${++paramsCount}
+      ORDER BY created_at DESC 
       LIMIT $${++paramsCount};`,
       [
         filters?.id,
@@ -170,51 +118,30 @@ export class ChatRepository implements IChatRepository {
       ].filter((param) => param != null)
     );
 
-    const chats = this.mapRowsToChats(
-      result.rows,
-      Boolean(filters?.includeMessages)
-    );
+    const paginatedChats: CursorPagination<Chat> = {
+      items: result.rows,
+      totalItems: result.rows[0]?.totalItems ?? 0,
+    };
 
-    const totalItems = result.rows[0]?.totalItems ?? 0;
-
-    return { items: chats, totalItems };
+    return paginatedChats;
   }
 
   async findOne(filters?: ChatFilters): Promise<Chat | null> {
     let paramsCount = 0;
 
-    const result = await this.dataContext.query<ChatQueryRow>(
-      `WITH "chat_cte" AS (
-        SELECT *
-        FROM "chat"
-        WHERE
-          ${filters?.id != null ? `id = $${++paramsCount} AND` : ""}
-          ${filters?.title != null ? `title ILIKE $${++paramsCount} AND` : ""}
-          ${filters?.userId != null ? `user_id = $${++paramsCount} AND` : ""}
-          TRUE
-        LIMIT 1
-      )
-      SELECT
-        chat_cte.id AS "chatId",
-        chat_cte.title AS "chatTitle",
-        chat_cte.user_id AS "chatUserId",
-        chat_cte.created_at AS "chatCreatedAt",
-        ${
-          filters?.includeMessages
-            ? `message.id AS "messageId",
-              message.role AS "messageRole",
-              message.content AS "messageContent",
-              message.chat_id AS "messageChatId",
-              message.created_at AS "messageCreatedAt",`
-            : ""
-        }
+    const result = await this.dataContext.query<Chat>(
+      `SELECT
+        id,
+        title,
+        user_id AS "userId",
+        created_at AS "createdAt"
+      FROM "chat"
+      WHERE
+        ${filters?.id != null ? `id = $${++paramsCount} AND` : ""}
+        ${filters?.title != null ? `title ILIKE $${++paramsCount} AND` : ""}
+        ${filters?.userId != null ? `user_id = $${++paramsCount} AND` : ""}
         TRUE
-      FROM "chat_cte"
-      ${
-        filters?.includeMessages
-          ? `LEFT JOIN "message" ON message.chat_id = chat_cte.id`
-          : ""
-      };`,
+      LIMIT 1;`,
       [
         filters?.id,
         filters?.title != null ? `%${filters.title}%` : null,
@@ -222,12 +149,7 @@ export class ChatRepository implements IChatRepository {
       ].filter((param) => param != null)
     );
 
-    const chats = this.mapRowsToChats(
-      result.rows,
-      Boolean(filters?.includeMessages)
-    );
-
-    const chat = ArrayUtils.firstOrNull(chats);
+    const chat = ArrayUtils.firstOrNull(result.rows);
 
     return chat;
   }
@@ -263,49 +185,5 @@ export class ChatRepository implements IChatRepository {
         id = $1;`,
       [id]
     );
-  }
-
-  mapRowToChat(row: ChatQueryRow): Chat {
-    return {
-      id: row.chatId,
-      title: row.chatTitle,
-      userId: row.chatUserId,
-      createdAt: row.chatCreatedAt,
-    };
-  }
-
-  mapRowToMessage(row: ChatQueryRow): Message {
-    return {
-      id: row.messageId,
-      role: row.messageRole,
-      content: row.messageContent,
-      chatId: row.messageChatId,
-      createdAt: row.messageCreatedAt,
-    };
-  }
-
-  mapRowsToChats(rows: ChatQueryRow[], includeMessages: boolean): Chat[] {
-    const chats: Chat[] = [];
-
-    let currentChat: Chat | null = null;
-
-    for (const row of rows) {
-      if (currentChat == null || row.chatId !== currentChat.id) {
-        currentChat = this.mapRowToChat(row);
-        chats.push(currentChat);
-      }
-
-      if (includeMessages && row.messageId != null) {
-        const message = this.mapRowToMessage(row);
-
-        if (currentChat.messages == null) {
-          currentChat.messages = [];
-        }
-
-        currentChat.messages.push(message);
-      }
-    }
-
-    return chats;
   }
 }

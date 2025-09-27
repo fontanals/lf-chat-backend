@@ -24,16 +24,19 @@ export class MessageRepository implements IMessageRepository {
         id,
         role,
         content,
+        parent_id AS "parentId",
         chat_id AS "chatId",
         created_at AS "createdAt"
       FROM "message"
       WHERE
         ${filters?.id != null ? `id = $${++paramsCount} AND` : ""}
         ${filters?.role != null ? `role = $${++paramsCount} AND` : ""}
+        ${filters?.parentId != null ? `parent_id = $${++paramsCount} AND` : ""}
+        ${filters?.parentId === null ? `parent_id IS NULL AND` : ""}
         ${filters?.chatId != null ? `chat_id = $${++paramsCount} AND` : ""}
         TRUE
       ORDER BY created_at;`,
-      [filters?.id, filters?.role, filters?.chatId].filter(
+      [filters?.id, filters?.role, filters?.parentId, filters?.chatId].filter(
         (param) => param != null
       )
     );
@@ -44,10 +47,16 @@ export class MessageRepository implements IMessageRepository {
   async create(message: Message): Promise<void> {
     await this.dataContext.execute(
       `INSERT INTO "message"
-      (id, role, content, chat_id)
+      (id, role, content, parent_id, chat_id)
       VALUES
-      ($1, $2, $3, $4);`,
-      [message.id, message.role, message.content, message.chatId]
+      ($1, $2, $3, $4, $5);`,
+      [
+        message.id,
+        message.role,
+        message.content,
+        message.parentId,
+        message.chatId,
+      ]
     );
   }
 }
