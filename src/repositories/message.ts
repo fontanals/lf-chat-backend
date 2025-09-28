@@ -24,9 +24,11 @@ export class MessageRepository implements IMessageRepository {
         id,
         role,
         content,
+        is_liked AS "isLiked",
         parent_id AS "parentId",
         chat_id AS "chatId",
-        created_at AS "createdAt"
+        created_at AS "createdAt",
+        updated_at AS "updatedAt"
       FROM "message"
       WHERE
         ${filters?.id != null ? `id = $${++paramsCount} AND` : ""}
@@ -47,13 +49,14 @@ export class MessageRepository implements IMessageRepository {
   async create(message: Message): Promise<void> {
     await this.dataContext.execute(
       `INSERT INTO "message"
-      (id, role, content, parent_id, chat_id)
+      (id, role, content, is_liked, parent_id, chat_id)
       VALUES
-      ($1, $2, $3, $4, $5);`,
+      ($1, $2, $3, $4, $5, $6);`,
       [
         message.id,
         message.role,
         message.content,
+        message.isLiked,
         message.parentId,
         message.chatId,
       ]

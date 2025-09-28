@@ -1,8 +1,13 @@
+import { Document } from "../models/entities/document";
+import { DocumentChunk } from "../models/entities/document-chunk";
 import { Message } from "../models/entities/message";
 
 export interface IAssistantService {
   validateMessage(message: Message): Promise<boolean>;
-  sendMessage(messages: Message[]): Promise<AsyncIterable<string>>;
+  sendMessage(
+    messages: Message[],
+    documents: (Document | DocumentChunk)[]
+  ): Promise<AsyncIterable<string>>;
   generateChatTitle(messages: Message[]): Promise<string>;
 }
 
@@ -114,7 +119,10 @@ export class AssistantService implements IAssistantService {
     return true;
   }
 
-  async sendMessage(messages: Message[]): Promise<AsyncIterable<string>> {
+  async sendMessage(
+    messages: Message[],
+    documents: (Document | DocumentChunk)[]
+  ): Promise<AsyncIterable<string>> {
     const chat =
       this.mockChats[Math.floor(Math.random() * this.mockChats.length)];
 

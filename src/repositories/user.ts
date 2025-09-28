@@ -58,8 +58,9 @@ export class UserRepository implements IUserRepository {
         email,
         password,
         display_name AS "displayName",
-        custom_preferences AS "customPreferences",
-        created_at AS "createdAt"
+        custom_prompt AS "customPrompt",
+        created_at AS "createdAt",
+        updated_at AS "updatedAt"
       FROM "user"
       WHERE
         ${filters?.id != null ? `id = $${++paramsCount} AND` : ""}
@@ -91,8 +92,9 @@ export class UserRepository implements IUserRepository {
         email,
         password,
         display_name AS "displayName",
-        custom_preferences AS "customPreferences",
-        created_at AS "createdAt"
+        custom_prompt AS "customPrompt",
+        created_at AS "createdAt",
+        updated_at AS "updatedAt"
       FROM "user"
       WHERE
         ${filters?.id != null ? `id = $${++paramsCount} AND` : ""}
@@ -119,7 +121,7 @@ export class UserRepository implements IUserRepository {
   async create(user: User): Promise<void> {
     await this.dataContext.execute(
       `INSERT INTO "user" 
-      (id, name, email, password, display_name, custom_preferences)
+      (id, name, email, password, display_name, custom_prompt)
       VALUES 
       ($1, $2, $3, $4, $5, $6);`,
       [
@@ -128,7 +130,7 @@ export class UserRepository implements IUserRepository {
         user.email,
         user.password,
         user.displayName,
-        user.customPreferences,
+        user.customPrompt,
       ]
     );
   }
@@ -143,12 +145,8 @@ export class UserRepository implements IUserRepository {
         ${user.email != null ? `email = $${++paramsCount},` : ""}
         ${user.password != null ? `password = $${++paramsCount},` : ""}
         ${user.displayName != null ? `display_name = $${++paramsCount},` : ""}
-        ${
-          user.customPreferences != null
-            ? `custom_preferences = $${++paramsCount},`
-            : ""
-        }
-        ${user.customPreferences === null ? `custom_preferences = NULL,` : ""}
+        ${user.customPrompt != null ? `custom_prompt = $${++paramsCount},` : ""}
+        ${user.customPrompt === null ? `custom_prompt = NULL,` : ""}
         id = id
       WHERE
         id = $${++paramsCount};`,
@@ -157,7 +155,7 @@ export class UserRepository implements IUserRepository {
         user.email,
         user.password,
         user.displayName,
-        user.customPreferences,
+        user.customPrompt,
         id,
       ].filter((param) => param != null)
     );

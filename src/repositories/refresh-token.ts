@@ -33,7 +33,8 @@ export class RefreshTokenRepository implements IRefreshTokenRepository {
         expires_at AS "expiresAt",
         is_revoked AS "isRevoked",
         session_id AS "sessionId",
-        created_at AS "createdAt"
+        created_at AS "createdAt",
+        updated_at AS "updatedAt"
       FROM "refresh_token"
       WHERE
         ${filters?.id != null ? `id = $${++paramsCount} AND` : ""}
@@ -67,7 +68,8 @@ export class RefreshTokenRepository implements IRefreshTokenRepository {
         expires_at AS "expiresAt",
         is_revoked AS "isRevoked",
         session_id AS "sessionId",
-        created_at AS "createdAt"
+        created_at AS "createdAt",
+        updated_at AS "updatedAt"
       FROM "refresh_token"
       WHERE
         ${filters?.id != null ? `id = $${++paramsCount} AND` : ""}

@@ -1,7 +1,20 @@
 import { Pool } from "pg";
 import { DataContext, IDataContext } from "./data/context";
 import { ChatRepository, IChatRepository } from "./repositories/chat";
+import {
+  DocumentRepository,
+  IDocumentRepository,
+} from "./repositories/document";
+import {
+  DocumentChunkRepository,
+  IDocumentChunkRepository,
+} from "./repositories/document-chunk";
 import { IMessageRepository, MessageRepository } from "./repositories/message";
+import {
+  IMessageAttachmentRepository,
+  MessageAttachmentRepository,
+} from "./repositories/message-attachment";
+import { IProjectRepository, ProjectRepository } from "./repositories/project";
 import {
   IRefreshTokenRepository,
   RefreshTokenRepository,
@@ -11,6 +24,9 @@ import { IUserRepository, UserRepository } from "./repositories/user";
 import { AssistantService, IAssistantService } from "./services/assistant";
 import { AuthService, IAuthService } from "./services/auth";
 import { ChatService, IChatService } from "./services/chat";
+import { DocumentService, IDocumentService } from "./services/document";
+import { DocumentManager, IDocumentManager } from "./services/document-manager";
+import { IProjectService, ProjectService } from "./services/project";
 import { IUserService, UserService } from "./services/user";
 
 type ServiceMap = {
@@ -18,12 +34,19 @@ type ServiceMap = {
   UserRepository: IUserRepository;
   SessionRepository: ISessionRepository;
   RefreshTokenRepository: IRefreshTokenRepository;
+  ProjectRepository: IProjectRepository;
   ChatRepository: IChatRepository;
   MessageRepository: IMessageRepository;
+  DocumentRepository: IDocumentRepository;
+  DocumentChunkRepository: IDocumentChunkRepository;
+  MessageAttachmentRepository: IMessageAttachmentRepository;
+  DocumentManager: IDocumentManager;
   AssistantService: IAssistantService;
   AuthService: IAuthService;
   UserService: IUserService;
+  ProjectService: IProjectService;
   ChatService: IChatService;
+  DocumentService: IDocumentService;
 };
 
 type ServiceIdentifier = keyof ServiceMap;
@@ -129,6 +152,11 @@ export function registerServices(services: ServiceContainer, pool: Pool) {
   });
 
   services.register({
+    identifier: "ProjectRepository",
+    factory: (services) => new ProjectRepository(services.get("DataContext")),
+  });
+
+  services.register({
     identifier: "ChatRepository",
     factory: (services) => new ChatRepository(services.get("DataContext")),
   });
@@ -136,6 +164,32 @@ export function registerServices(services: ServiceContainer, pool: Pool) {
   services.register({
     identifier: "MessageRepository",
     factory: (services) => new MessageRepository(services.get("DataContext")),
+  });
+
+  services.register({
+    identifier: "DocumentRepository",
+    factory: (services) => new DocumentRepository(services.get("DataContext")),
+  });
+
+  services.register({
+    identifier: "DocumentChunkRepository",
+    factory: (services) =>
+      new DocumentChunkRepository(services.get("DataContext")),
+  });
+
+  services.register({
+    identifier: "MessageAttachmentRepository",
+    factory: (services) =>
+      new MessageAttachmentRepository(services.get("DataContext")),
+  });
+
+  services.register({
+    identifier: "DocumentManager",
+    factory: (services) =>
+      new DocumentManager(
+        services.get("DocumentRepository"),
+        services.get("DocumentChunkRepository")
+      ),
   });
 
   services.register({
@@ -165,13 +219,33 @@ export function registerServices(services: ServiceContainer, pool: Pool) {
   });
 
   services.register({
+    identifier: "ProjectService",
+    factory: (services) =>
+      new ProjectService(
+        services.get("DataContext"),
+        services.get("ProjectRepository")
+      ),
+  });
+
+  services.register({
     identifier: "ChatService",
     factory: (services) =>
       new ChatService(
         services.get("DataContext"),
         services.get("ChatRepository"),
         services.get("MessageRepository"),
-        services.get("AssistantService")
+        services.get("MessageAttachmentRepository"),
+        services.get("AssistantService"),
+        services.get("DocumentManager")
+      ),
+  });
+
+  services.register({
+    identifier: "DocumentService",
+    factory: (services) =>
+      new DocumentService(
+        services.get("DataContext"),
+        services.get("DocumentManager")
       ),
   });
 }

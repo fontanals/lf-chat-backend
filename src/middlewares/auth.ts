@@ -48,6 +48,8 @@ export function authMiddleware(services: IServiceProvider): RequestHandler {
 
       next();
     } catch (error) {
+      console.error("AUTH ERROR: ", error);
+
       const applicationError =
         error instanceof ApplicationError
           ? error

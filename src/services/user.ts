@@ -63,7 +63,7 @@ export class UserService implements IUserService {
     await this.userRepository.update(authContext.user.id, {
       name: request.name,
       displayName: request.displayName,
-      customPreferences: request.customPreferences,
+      customPrompt: request.customPrompt,
     });
 
     return authContext.user.id;

@@ -4,12 +4,15 @@ import { Express, json } from "express";
 import { Server } from "node:http";
 import { Pool } from "pg";
 import { config } from "./config";
+import { authMiddleware } from "./middlewares/auth";
+import { errorMiddleware } from "./middlewares/error";
 import { createAuthRoutes } from "./routes/auth";
-import { createChatRoutes } from "./routes/chat";
+import { createChatRoutes } from "./routes/chats";
+import { createDocumentRoutes } from "./routes/documents";
+import { createProjectRoutes } from "./routes/projects";
 import { createUserRoutes } from "./routes/user";
 import { registerServices, ServiceContainer } from "./service-provider";
 import { NumberUtils } from "./utils/numbers";
-import { authMiddleware } from "./middlewares/auth";
 
 export class Application {
   private readonly server: Server;
@@ -28,6 +31,8 @@ export class Application {
     expressApp.use(json());
 
     this.setupRoutes(expressApp);
+
+    expressApp.use(errorMiddleware);
 
     this.server = expressApp.listen(
       NumberUtils.safeParseInt(config.PORT, 3000),
@@ -64,9 +69,19 @@ export class Application {
       createUserRoutes(this.serviceContainer)
     );
     expressApp.use(
+      "/api/projects",
+      authMiddleware(this.serviceContainer),
+      createProjectRoutes(this.serviceContainer)
+    );
+    expressApp.use(
       "/api/chats",
       authMiddleware(this.serviceContainer),
       createChatRoutes(this.serviceContainer)
+    );
+    expressApp.use(
+      "/api/documents",
+      authMiddleware(this.serviceContainer),
+      createDocumentRoutes(this.serviceContainer)
     );
   }
 }

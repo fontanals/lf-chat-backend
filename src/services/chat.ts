@@ -2,7 +2,10 @@ import { randomUUID } from "crypto";
 import z from "zod";
 import { IDataContext } from "../data/context";
 import { Chat } from "../models/entities/chat";
+import { Document } from "../models/entities/document";
+import { DocumentChunk } from "../models/entities/document-chunk";
 import { Message } from "../models/entities/message";
+import { MessageAttachment } from "../models/entities/message-attachment";
 import {
   CreateChatRequest,
   DeleteChatParams,
@@ -24,6 +27,8 @@ import {
 } from "../models/responses/chat";
 import { IChatRepository } from "../repositories/chat";
 import { IMessageRepository } from "../repositories/message";
+import { IMessageAttachmentRepository } from "../repositories/message-attachment";
+import { ArrayUtils } from "../utils/arrays";
 import { ApplicationError } from "../utils/errors";
 import {
   getQueryDate,
@@ -33,6 +38,7 @@ import {
 } from "../utils/express";
 import { IAssistantService } from "./assistant";
 import { AuthContext } from "./auth";
+import { IDocumentManager } from "./document-manager";
 
 export interface IChatService {
   getChats(
@@ -73,18 +79,24 @@ export class ChatService implements IChatService {
   private readonly dataContext: IDataContext;
   private readonly chatRepository: IChatRepository;
   private readonly messageRepository: IMessageRepository;
+  private readonly messageAttachmentRepository: IMessageAttachmentRepository;
   private readonly assistantService: IAssistantService;
+  private readonly documentManager: IDocumentManager;
 
   constructor(
     dataContext: IDataContext,
     chatRepository: IChatRepository,
     messageRepository: IMessageRepository,
-    assistantService: IAssistantService
+    messageAttachmentRepository: IMessageAttachmentRepository,
+    assistantService: IAssistantService,
+    documentManager: IDocumentManager
   ) {
     this.dataContext = dataContext;
     this.chatRepository = chatRepository;
     this.messageRepository = messageRepository;
+    this.messageAttachmentRepository = messageAttachmentRepository;
     this.assistantService = assistantService;
+    this.documentManager = documentManager;
   }
 
   async getChats(
@@ -177,11 +189,20 @@ export class ChatService implements IChatService {
     authContext: AuthContext,
     onSendEvent: (event: ChatServerSentEvent) => void
   ): Promise<void> {
-    validateRequest(request, z.object({ id: z.string(), message: z.string() }));
+    validateRequest(
+      request,
+      z.object({
+        id: z.string(),
+        message: z.string(),
+        attachmentIds: z.array(z.string()).optional(),
+        projectId: z.string().nullable().optional(),
+      })
+    );
 
     const chat: Chat = {
       id: request.id,
       title: "",
+      projectId: request.projectId,
       userId: authContext.user.id,
     };
 
@@ -201,6 +222,28 @@ export class ChatService implements IChatService {
       throw ApplicationError.userMessageViolatesContentPolicy();
     }
 
+    let projectDocumentChunks: DocumentChunk[] = [];
+    let userMessageDocuments: Document[] = [];
+
+    if (request.projectId != null) {
+      projectDocumentChunks =
+        await this.documentManager.getProjectRelevantDocumentChunks(
+          userMessage.content,
+          request.projectId
+        );
+    }
+
+    if (!ArrayUtils.isNullOrEmpty(request.attachmentIds)) {
+      userMessageDocuments = await this.documentManager.getDocuments(
+        request.attachmentIds!,
+        true
+      );
+
+      if (userMessageDocuments.length !== request.attachmentIds!.length) {
+        throw ApplicationError.badRequest();
+      }
+    }
+
     const assistantMessage: Message = {
       id: randomUUID(),
       role: "assistant",
@@ -216,6 +259,16 @@ export class ChatService implements IChatService {
 
       await this.messageRepository.create(userMessage);
 
+      if (!ArrayUtils.isNullOrEmpty(userMessageDocuments)) {
+        const messageAttachments: MessageAttachment[] =
+          userMessageDocuments.map((document) => ({
+            messageId: userMessage.id,
+            documentId: document.id,
+          }));
+
+        await this.messageAttachmentRepository.createAll(messageAttachments);
+      }
+
       await this.dataContext.commit();
     } catch (error) {
       await this.dataContext.rollback();
@@ -228,7 +281,10 @@ export class ChatService implements IChatService {
       isDone: false,
     });
 
-    const stream = await this.assistantService.sendMessage([userMessage]);
+    const stream = await this.assistantService.sendMessage(
+      [userMessage],
+      [...projectDocumentChunks, ...userMessageDocuments]
+    );
 
     for await (const chunk of stream) {
       assistantMessage.content += chunk;
@@ -262,14 +318,22 @@ export class ChatService implements IChatService {
     authContext: AuthContext,
     onSendEvent: (event: ChatServerSentEvent) => void
   ): Promise<void> {
-    validateRequest(request, z.object({ id: z.string(), content: z.string() }));
+    validateRequest(
+      request,
+      z.object({
+        id: z.string(),
+        content: z.string(),
+        parentId: z.string().nullable().optional(),
+        attachmentIds: z.array(z.string()).optional(),
+      })
+    );
 
-    const chatExists = await this.chatRepository.exists({
+    const chat = await this.chatRepository.findOne({
       id: params.chatId,
       userId: authContext.user.id,
     });
 
-    if (!chatExists) {
+    if (chat == null) {
       throw ApplicationError.notFound();
     }
 
@@ -301,6 +365,33 @@ export class ChatService implements IChatService {
       chatId: params.chatId,
     });
 
+    const previousDocuments = await this.documentManager.getChatDocuments(
+      params.chatId,
+      true
+    );
+
+    let projectDocumentChunks: DocumentChunk[] = [];
+    let userMessageDocuments: Document[] = [];
+
+    if (chat.projectId != null) {
+      projectDocumentChunks =
+        await this.documentManager.getProjectRelevantDocumentChunks(
+          userMessage.content,
+          chat.projectId
+        );
+    }
+
+    if (!ArrayUtils.isNullOrEmpty(request.attachmentIds)) {
+      userMessageDocuments = await this.documentManager.getDocuments(
+        request.attachmentIds!,
+        true
+      );
+
+      if (userMessageDocuments.length !== request.attachmentIds!.length) {
+        throw ApplicationError.badRequest();
+      }
+    }
+
     await this.messageRepository.create(userMessage);
 
     onSendEvent({
@@ -309,10 +400,10 @@ export class ChatService implements IChatService {
       isDone: false,
     });
 
-    const stream = await this.assistantService.sendMessage([
-      ...previousMessages,
-      userMessage,
-    ]);
+    const stream = await this.assistantService.sendMessage(
+      [...previousMessages, userMessage],
+      [...projectDocumentChunks, ...previousDocuments, ...userMessageDocuments]
+    );
 
     for await (const chunk of stream) {
       assistantMessage.content += chunk;

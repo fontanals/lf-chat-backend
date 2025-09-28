@@ -35,12 +35,16 @@ export class ChatRepository implements IChatRepository {
       WHERE
         ${filters?.id != null ? `id = $${++paramsCount} AND` : ""}
         ${filters?.title != null ? `title ILIKE $${++paramsCount} AND` : ""}
+        ${
+          filters?.projectId != null ? `project_id = $${++paramsCount} AND` : ""
+        }
         ${filters?.userId != null ? `user_id = $${++paramsCount} AND` : ""}
         TRUE
       LIMIT 1;`,
       [
         filters?.id,
         filters?.title != null ? `%${filters.title}%` : null,
+        filters?.projectId,
         filters?.userId,
       ].filter((param) => param != null)
     );
@@ -57,20 +61,24 @@ export class ChatRepository implements IChatRepository {
       `SELECT
         id,
         title,
+        project_id AS "projectId",
         user_id AS "userId",
-        created_at AS "createdAt"
+        created_at AS "createdAt",
+        updated_at AS "updatedAt"
       FROM "chat"
       WHERE
-        ${filters?.id != null ? `chat.id = $${++paramsCount} AND` : ""}
+        ${filters?.id != null ? `id = $${++paramsCount} AND` : ""}
+        ${filters?.title != null ? `title ILIKE $${++paramsCount} AND` : ""}
         ${
-          filters?.title != null ? `chat.title ILIKE $${++paramsCount} AND` : ""
+          filters?.projectId != null ? `project_id = $${++paramsCount} AND` : ""
         }
-        ${filters?.userId != null ? `chat.user_id = $${++paramsCount} AND` : ""}
+        ${filters?.userId != null ? `user_id = $${++paramsCount} AND` : ""}
         TRUE
       ORDER BY created_at DESC;`,
       [
         filters?.id,
         filters?.title != null ? `%${filters.title}%` : null,
+        filters?.projectId,
         filters?.userId,
       ].filter((param) => param != null)
     );
@@ -94,6 +102,11 @@ export class ChatRepository implements IChatRepository {
         WHERE
           ${filters?.id != null ? `id = $${++paramsCount} AND` : ""}
           ${filters?.title != null ? `title ILIKE $${++paramsCount} AND` : ""}
+          ${
+            filters?.projectId != null
+              ? `project_id = $${++paramsCount} AND`
+              : ""
+          }
           ${filters?.userId != null ? `user_id = $${++paramsCount} AND` : ""}
           TRUE
         ORDER BY created_at DESC
@@ -101,8 +114,10 @@ export class ChatRepository implements IChatRepository {
       SELECT
         id,
         title,
+        project_id AS "projectId",
         user_id AS "userId",
         created_at AS "createdAt",
+        updated_at AS "updatedAt",
         total_items AS "totalItems"
       FROM "chat_cte"
       WHERE
@@ -112,6 +127,7 @@ export class ChatRepository implements IChatRepository {
       [
         filters?.id,
         filters?.title != null ? `%${filters.title}%` : null,
+        filters?.projectId,
         filters?.userId,
         cursor,
         limit,
@@ -133,18 +149,24 @@ export class ChatRepository implements IChatRepository {
       `SELECT
         id,
         title,
+        project_id AS "projectId",
         user_id AS "userId",
-        created_at AS "createdAt"
+        created_at AS "createdAt",
+        updated_at AS "updatedAt"
       FROM "chat"
       WHERE
         ${filters?.id != null ? `id = $${++paramsCount} AND` : ""}
         ${filters?.title != null ? `title ILIKE $${++paramsCount} AND` : ""}
+        ${
+          filters?.projectId != null ? `project_id = $${++paramsCount} AND` : ""
+        }
         ${filters?.userId != null ? `user_id = $${++paramsCount} AND` : ""}
         TRUE
       LIMIT 1;`,
       [
         filters?.id,
         filters?.title != null ? `%${filters.title}%` : null,
+        filters?.projectId,
         filters?.userId,
       ].filter((param) => param != null)
     );
@@ -157,10 +179,10 @@ export class ChatRepository implements IChatRepository {
   async create(chat: Chat): Promise<void> {
     await this.dataContext.execute(
       `INSERT INTO "chat"
-      (id, title, user_id)
+      (id, title, project_id, user_id)
       VALUES
-      ($1, $2, $3);`,
-      [chat.id, chat.title, chat.userId]
+      ($1, $2, $3, $4);`,
+      [chat.id, chat.title, chat.projectId, chat.userId]
     );
   }
 

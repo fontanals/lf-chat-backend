@@ -1,34 +1,76 @@
+CREATE FUNCTION set_updated_at() RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at = CURRENT_TIMESTAMP;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
 CREATE TABLE "user" (
     "id" uuid PRIMARY KEY,
     "name" text NOT NULL,
     "email" text NOT NULL UNIQUE,
     "password" text NOT NULL,
     "display_name" text NOT NULL,
-    "custom_preferences" text,
-    "created_at" timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+    "custom_prompt" text,
+    "created_at" timestamp with time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" timestamp with time zone NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE TRIGGER set_user_updated_at
+BEFORE UPDATE ON "user"
+FOR EACH ROW
+EXECUTE FUNCTION set_updated_at();
 
 CREATE TABLE "session" (
     "id" uuid PRIMARY KEY,
+    "expires_at" timestamp with time zone NOT NULL,
     "user_id" uuid NOT NULL REFERENCES "user"("id") ON DELETE CASCADE,
-    "created_at" timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP
+    "created_at" timestamp with time zone NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE "refresh_token" (
     "id" uuid PRIMARY KEY,
     "token" text NOT NULL,
-    "expires_at" timestamp NOT NULL,
+    "expires_at" timestamp with time zone NOT NULL,
     "is_revoked" boolean NOT NULL DEFAULT false,
-    "created_at" timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "created_at" timestamp with time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" timestamp with time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "session_id" uuid NOT NULL REFERENCES "session"("id") ON DELETE CASCADE
 );
+
+CREATE TRIGGER set_refresh_token_updated_at
+BEFORE UPDATE
+ON "refresh_token"
+FOR EACH ROW
+EXECUTE FUNCTION set_updated_at();
+
+CREATE TABLE "project" (
+    "id" uuid PRIMARY KEY,
+    "name" text NOT NULL,
+    "description" text NOT NULL,
+    "created_at" timestamp with time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" timestamp with time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "user_id" uuid NOT NULL REFERENCES "user"("id") ON DELETE CASCADE
+);
+
+CREATE TRIGGER set_project_updated_at
+BEFORE UPDATE ON "project"
+FOR EACH ROW
+EXECUTE FUNCTION set_updated_at();
 
 CREATE TABLE "chat" (
     "id" uuid PRIMARY KEY,
     "title" text NOT NULL,
-    "created_at" timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "created_at" timestamp with time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" timestamp with time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "project_id" uuid REFERENCES "project"("id") ON DELETE SET NULL,
     "user_id" uuid NOT NULL REFERENCES "user"("id") ON DELETE CASCADE
 );
+
+CREATE TRIGGER set_chat_updated_at
+BEFORE UPDATE ON "chat"
+FOR EACH ROW
+EXECUTE FUNCTION set_updated_at();
 
 CREATE TYPE "message_role" AS ENUM ('user', 'assistant');
 
@@ -36,7 +78,49 @@ CREATE TABLE "message" (
     "id" uuid PRIMARY KEY,
     "role" message_role NOT NULL,
     "content" text NOT NULL,
-    "created_at" timestamp NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "is_liked" boolean,
+    "created_at" timestamp with time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" timestamp with time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "parent_id" uuid REFERENCES "message"("id") ON DELETE CASCADE,
     "chat_id" uuid NOT NULL REFERENCES "chat"("id") ON DELETE CASCADE
 );
+
+CREATE TRIGGER set_message_updated_at
+BEFORE UPDATE ON "message"
+FOR EACH ROW
+EXECUTE FUNCTION set_updated_at();
+
+CREATE TABLE "document" (
+    "id" uuid PRIMARY KEY,
+    "name" text NOT NULL,
+    "path" text NOT NULL UNIQUE,
+    "mimetype" text NOT NULL,
+    "size" integer NOT NULL,
+    "created_at" timestamp with time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updated_at" timestamp with time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "chat_id" uuid REFERENCES "chat"("id") ON DELETE SET NULL,
+    "project_id" uuid REFERENCES "project"("id") ON DELETE SET NULL,
+    "user_id" uuid NOT NULL REFERENCES "user"("id") ON DELETE CASCADE
+);
+
+CREATE TRIGGER set_document_updated_at
+BEFORE UPDATE ON "document"
+FOR EACH ROW
+EXECUTE FUNCTION set_updated_at();
+
+CREATE TABLE "document_chunk" (
+    "id" uuid PRIMARY KEY,
+    "index" integer NOT NULL,
+    "content" text NOT NULL,
+    "embedding" vector(1536) NOT NULL,
+    "created_at" timestamp with time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "document_id" uuid NOT NULL REFERENCES "document"("id") ON DELETE CASCADE
+);
+
+CREATE TABLE "message_attachment" (
+    "message_id" uuid NOT NULL REFERENCES "message"("id") ON DELETE CASCADE,
+    "document_id" uuid NOT NULL REFERENCES "document"("id") ON DELETE CASCADE,
+    PRIMARY KEY ("message_id", "document_id")
+);
+
+

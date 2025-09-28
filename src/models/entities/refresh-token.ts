@@ -5,4 +5,5 @@ export type RefreshToken = {
   isRevoked: boolean;
   sessionId: string;
   createdAt?: Date;
+  updatedAt?: Date;
 };

@@ -24,6 +24,7 @@ export class SessionRepository implements ISessionRepository {
     const result = await this.dataContext.query<Session>(
       `SELECT
         id,
+        expires_at AS "expiresAt",
         user_id AS "userId",
         created_at AS "createdAt"
       FROM "session"
@@ -44,6 +45,7 @@ export class SessionRepository implements ISessionRepository {
     const result = await this.dataContext.query<Session>(
       `SELECT
         id,
+        expires_at AS "expiresAt",
         user_id AS "userId",
         created_at AS "createdAt"
       FROM "session"
@@ -63,10 +65,10 @@ export class SessionRepository implements ISessionRepository {
   async create(session: Session): Promise<void> {
     await this.dataContext.execute(
       `INSERT INTO "session" 
-      (id, user_id)
+      (id, expires_at, user_id)
       VALUES 
-      ($1, $2);`,
-      [session.id, session.userId]
+      ($1, $2, $3);`,
+      [session.id, session.expiresAt, session.userId]
     );
   }
 }

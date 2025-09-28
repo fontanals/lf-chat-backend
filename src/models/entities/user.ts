@@ -4,8 +4,9 @@ export type User = {
   email: string;
   password: string;
   displayName: string;
-  customPreferences?: string | null;
+  customPrompt?: string | null;
   createdAt?: Date;
+  updatedAt?: Date;
 };
 
 export type UserDto = Omit<User, "password">;
@@ -16,7 +17,7 @@ export function mapUserToDto(user: User): UserDto {
     name: user.name,
     email: user.email,
     displayName: user.displayName,
-    customPreferences: user.customPreferences,
+    customPrompt: user.customPrompt,
     createdAt: user.createdAt,
   };
 }

@@ -4,7 +4,7 @@ export type Message = {
   id: string;
   role: MessageRole;
   content: string;
-  isLiked?: boolean;
+  isLiked?: boolean | null;
   parentId?: string | null;
   chatId: string;
   createdAt?: Date;

@@ -103,10 +103,14 @@ export class AuthService implements IAuthService {
       email: request.email,
       password: hashedPassword,
       displayName: request.name.split(" ")[0],
-      customPreferences: null,
+      customPrompt: null,
     };
 
-    const session: Session = { id: randomUUID(), userId: user.id };
+    const session: Session = {
+      id: randomUUID(),
+      expiresAt: addDays(new Date(), 7),
+      userId: user.id,
+    };
 
     const userDto = mapUserToDto(user);
 
@@ -166,7 +170,11 @@ export class AuthService implements IAuthService {
       throw ApplicationError.invalidEmailOrPassword();
     }
 
-    const session: Session = { id: randomUUID(), userId: user.id };
+    const session: Session = {
+      id: randomUUID(),
+      expiresAt: addDays(new Date(), 7),
+      userId: user.id,
+    };
 
     const userDto = mapUserToDto(user);
 
