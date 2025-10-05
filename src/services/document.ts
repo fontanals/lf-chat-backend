@@ -9,9 +9,9 @@ import {
   UploadDocumentResponse,
 } from "../models/responses/document";
 import { ApplicationError } from "../utils/errors";
+import { validateRequest } from "../utils/express";
 import { AuthContext } from "./auth";
 import { IDocumentManager } from "./document-manager";
-import { validateRequest } from "../utils/express";
 
 export interface IDocumentService {
   uploadDocument(
@@ -51,14 +51,27 @@ export class DocumentService implements IDocumentService {
       throw ApplicationError.badRequest();
     }
 
-    const documentId = await this.documentManager.createDocument(
-      file,
-      authContext.user.id,
-      request.chatId,
-      request.projectId
-    );
+    try {
+      await this.dataContext.begin();
 
-    return documentId;
+      const document = await this.documentManager.createDocument(
+        file,
+        authContext.user.id,
+        request.chatId,
+        request.projectId
+      );
+
+      if (request.projectId != null) {
+        await this.documentManager.processDocument(document);
+      }
+
+      await this.dataContext.commit();
+
+      return document.id;
+    } catch (error) {
+      await this.dataContext.rollback();
+      throw error;
+    }
   }
 
   async deleteDocument(

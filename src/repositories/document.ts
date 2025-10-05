@@ -6,7 +6,6 @@ import { NullablePartial } from "../utils/types";
 export type DocumentFilters = NullablePartial<Document & { ids: string[] }>;
 
 export interface IDocumentRepository {
-  exists(filters?: DocumentFilters): Promise<boolean>;
   findAll(filters?: DocumentFilters): Promise<Document[]>;
   findOne(filters?: DocumentFilters): Promise<Document | null>;
   create(document: Document): Promise<void>;
@@ -19,38 +18,6 @@ export class DocumentRepository implements IDocumentRepository {
 
   constructor(dataContext: IDataContext) {
     this.dataContext = dataContext;
-  }
-
-  async exists(filters?: DocumentFilters): Promise<boolean> {
-    let paramsCount = 0;
-
-    const result = await this.dataContext.query(
-      `SELECT 1
-      FROM "document"
-      WHERE
-        ${filters?.id != null ? `id = $${++paramsCount} AND` : ""}
-        ${filters?.path != null ? `path = $${++paramsCount} AND` : ""}
-        ${filters?.chatId != null ? `chat_id = $${++paramsCount} AND` : ""}
-        ${
-          filters?.projectId != null ? `project_id = $${++paramsCount} AND` : ""
-        }
-        ${filters?.userId != null ? `user_id = $${++paramsCount} AND` : ""}
-        ${filters?.ids != null ? `id = ANY($${++paramsCount}) AND` : ""}
-        TRUE
-      LIMIT 1;`,
-      [
-        filters?.id,
-        filters?.path,
-        filters?.chatId,
-        filters?.projectId,
-        filters?.userId,
-        filters?.ids,
-      ].filter((param) => param != null)
-    );
-
-    const exists = !ArrayUtils.isNullOrEmpty(result.rows);
-
-    return exists;
   }
 
   async findAll(filters?: DocumentFilters): Promise<Document[]> {

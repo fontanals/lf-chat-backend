@@ -6,6 +6,7 @@ import { Document } from "../models/entities/document";
 import { DocumentChunk } from "../models/entities/document-chunk";
 import { IDocumentRepository } from "../repositories/document";
 import { IDocumentChunkRepository } from "../repositories/document-chunk";
+import { IAssistantService } from "./assistant";
 
 export interface IDocumentManager {
   getDocuments(ids: string[], includeContent?: boolean): Promise<Document[]>;
@@ -27,7 +28,7 @@ export interface IDocumentManager {
     userId: string,
     chatId?: string,
     projectId?: string
-  ): Promise<string>;
+  ): Promise<Document>;
   processDocument(document: Document): Promise<string>;
   updateDocument(document: Document): Promise<string>;
   deleteDocument(document: Document): Promise<string>;
@@ -36,13 +37,16 @@ export interface IDocumentManager {
 export class DocumentManager implements IDocumentManager {
   private readonly documentRepository: IDocumentRepository;
   private readonly documentChunkRepository: IDocumentChunkRepository;
+  private readonly assistantService: IAssistantService;
 
   constructor(
     documentRepository: IDocumentRepository,
-    documentChunkRepository: IDocumentChunkRepository
+    documentChunkRepository: IDocumentChunkRepository,
+    assistantService: IAssistantService
   ) {
     this.documentRepository = documentRepository;
     this.documentChunkRepository = documentChunkRepository;
+    this.assistantService = assistantService;
   }
 
   async getDocuments(
@@ -52,13 +56,7 @@ export class DocumentManager implements IDocumentManager {
     const documents = await this.documentRepository.findAll({ ids });
 
     if (includeContent) {
-      for (const document of documents) {
-        const buffer = await fs.readFile(document.path);
-
-        const pdf = await parsePdf(buffer);
-
-        document.content = pdf.text;
-      }
+      await this.getDocumentsContent(documents);
     }
 
     return documents;
@@ -71,13 +69,7 @@ export class DocumentManager implements IDocumentManager {
     const documents = await this.documentRepository.findAll({ chatId });
 
     if (includeContent) {
-      for (const document of documents) {
-        const buffer = await fs.readFile(document.path);
-
-        const pdf = await parsePdf(buffer);
-
-        document.content = pdf.text;
-      }
+      await this.getDocumentsContent(documents);
     }
 
     return documents;
@@ -87,7 +79,12 @@ export class DocumentManager implements IDocumentManager {
     query: string,
     projectId: string
   ): Promise<DocumentChunk[]> {
-    return [];
+    const relevantDocumentChunks =
+      await this.documentChunkRepository.findRelevant(query, 0.5, {
+        projectId,
+      });
+
+    return relevantDocumentChunks;
   }
 
   async getDocument(
@@ -98,11 +95,7 @@ export class DocumentManager implements IDocumentManager {
     const document = await this.documentRepository.findOne({ id, userId });
 
     if (document != null && includeContent) {
-      const buffer = await fs.readFile(document.path);
-
-      const pdf = await parsePdf(buffer);
-
-      document.content = pdf.text;
+      await this.getDocumentContent(document);
     }
 
     return document;
@@ -113,7 +106,7 @@ export class DocumentManager implements IDocumentManager {
     userId: string,
     chatId?: string,
     projectId?: string
-  ): Promise<string> {
+  ): Promise<Document> {
     const document: Document = {
       id: randomUUID(),
       name: file.originalname,
@@ -129,19 +122,15 @@ export class DocumentManager implements IDocumentManager {
 
     await this.documentRepository.create(document);
 
-    if (projectId != null) {
-      await this.processDocument(document);
-    }
-
-    return document.id;
+    return document;
   }
 
   async processDocument(document: Document): Promise<string> {
-    const buffer = await fs.readFile(document.path);
+    await this.getDocumentContent(document);
 
-    const pdf = await parsePdf(buffer);
+    const documentChunks = await this.chunkDocument(document);
 
-    const documentChunks = this.chunkDocument(document, pdf.text);
+    await this.generateEmbeddings(documentChunks);
 
     await this.documentChunkRepository.createAll(documentChunks);
 
@@ -162,11 +151,39 @@ export class DocumentManager implements IDocumentManager {
     return document.id;
   }
 
-  chunkDocument(document: Document, content: string) {
+  private async getDocumentsContent(documents: Document[]) {
+    await Promise.all(
+      documents.map((document) => this.getDocumentContent(document))
+    );
+  }
+
+  private async getDocumentContent(document: Document) {
+    const buffer = await fs.readFile(document.path);
+
+    const pdf = await parsePdf(buffer);
+
+    document.content = pdf.text;
+  }
+
+  private async generateEmbeddings(documentChunks: DocumentChunk[]) {
+    await Promise.all(
+      documentChunks.map(async (documentChunk) => {
+        documentChunk.embedding = await this.assistantService.generateEmbedding(
+          documentChunk.content
+        );
+      })
+    );
+  }
+
+  private async chunkDocument(document: Document) {
+    if (document.content == null) {
+      return [];
+    }
+
     const chunkSize = 500;
     const overlap = 50;
 
-    const words = content.split(/\s+/).filter(Boolean);
+    const words = document.content.split(/\s+/).filter(Boolean);
 
     const documentChunks: DocumentChunk[] = [];
 

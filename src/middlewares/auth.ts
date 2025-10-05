@@ -57,7 +57,7 @@ export function authMiddleware(services: IServiceProvider): RequestHandler {
 
       const response = errorResponse(applicationError);
 
-      res.status(applicationError.statusCode).json(response);
+      res.status(applicationError.getStatusCode()).json(response);
     }
   };
 }

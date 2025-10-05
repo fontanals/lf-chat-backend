@@ -12,5 +12,5 @@ export const errorMiddleware: ErrorRequestHandler = (error, req, res, next) => {
 
   const response = errorResponse(applicationError);
 
-  res.status(applicationError.statusCode).json(response);
+  res.status(applicationError.getStatusCode()).json(response);
 };

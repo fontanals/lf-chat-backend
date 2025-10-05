@@ -69,11 +69,17 @@ export interface IServiceProvider {
 }
 
 export class ServiceScope implements IServiceProvider {
-  private readonly parent: IServiceProvider;
+  private readonly descriptors: Partial<{
+    [K in ServiceIdentifier]: ServiceDescriptor<K>;
+  }>;
   private readonly scopedServices: Partial<ServiceMap> = {};
 
-  constructor(parent: IServiceProvider) {
-    this.parent = parent;
+  constructor(
+    descriptors: Partial<{
+      [K in ServiceIdentifier]: ServiceDescriptor<K>;
+    }>
+  ) {
+    this.descriptors = descriptors;
   }
 
   get<TServiceIdentifier extends ServiceIdentifier>(
@@ -83,7 +89,16 @@ export class ServiceScope implements IServiceProvider {
       return this.scopedServices[identifier];
     }
 
-    const instance = this.parent.get(identifier);
+    const descriptor = this.descriptors[identifier];
+
+    if (descriptor == null) {
+      throw new Error(`${identifier} service is not registered.`);
+    }
+
+    const instance =
+      descriptor.singleton && descriptor.instance != null
+        ? descriptor.instance
+        : descriptor.factory(this);
 
     this.scopedServices[identifier] = instance;
 
@@ -92,40 +107,35 @@ export class ServiceScope implements IServiceProvider {
 }
 
 export class ServiceContainer implements IServiceProvider {
-  private readonly services: Partial<{
+  private readonly descriptors: Partial<{
     [K in ServiceIdentifier]: ServiceDescriptor<K>;
   }> = {};
 
   register<TServiceIdentifier extends ServiceIdentifier>(
     descriptor: ServiceDescriptor<TServiceIdentifier>
   ) {
-    this.services[descriptor.identifier] = descriptor as any;
+    this.descriptors[descriptor.identifier] = descriptor as any;
   }
 
   get<TServiceIdentifier extends ServiceIdentifier>(
     identifier: TServiceIdentifier
   ): ServiceMap[TServiceIdentifier] {
-    const descriptor = this.services[identifier];
+    const descriptor = this.descriptors[identifier];
 
     if (descriptor == null) {
       throw new Error(`${identifier} service is not registered.`);
     }
 
-    if (descriptor.singleton && descriptor.instance != null) {
-      return descriptor.instance;
-    }
-
-    const instance = descriptor.factory(this);
-
-    if (descriptor.singleton) {
-      descriptor.instance = instance;
-    }
+    const instance =
+      descriptor.singleton && descriptor.instance != null
+        ? descriptor.instance
+        : descriptor.factory(this);
 
     return instance;
   }
 
   createScope(): ServiceScope {
-    return new ServiceScope(this);
+    return new ServiceScope(this.descriptors);
   }
 }
 
@@ -188,7 +198,8 @@ export function registerServices(services: ServiceContainer, pool: Pool) {
     factory: (services) =>
       new DocumentManager(
         services.get("DocumentRepository"),
-        services.get("DocumentChunkRepository")
+        services.get("DocumentChunkRepository"),
+        services.get("AssistantService")
       ),
   });
 

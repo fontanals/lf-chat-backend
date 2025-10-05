@@ -16,4 +16,8 @@ export class SqlUtils {
       return value;
     }).join(",\n");
   }
+
+  static vectorToSql(vector: number[]): string {
+    return JSON.stringify(vector);
+  }
 }
