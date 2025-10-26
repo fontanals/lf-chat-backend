@@ -8,15 +8,14 @@ export type NullablePartial<T> = {
   [K in keyof T]?: T[K] | null;
 };
 
-export type CursorPagination<TItem> = {
+export type CursorPagination<TItem, TCursor> = {
   items: TItem[];
   totalItems: number;
+  nextCursor?: TCursor;
 };
 
-export type ServerSentEvent<TEvent = string, TData = unknown> = {
-  event: TEvent;
-  data: TData;
-  isDone: boolean;
-};
-
-export type ErrorServerSentEvent = ServerSentEvent<"error", ApplicationError>;
+export type ServerSentEvent<TEvent extends String = String, TData = unknown> =
+  | { event: "start" }
+  | { event: TEvent; data: TData }
+  | { event: "error"; error: ApplicationError }
+  | { event: "end" };

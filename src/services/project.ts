@@ -91,14 +91,14 @@ export class ProjectService implements IProjectService {
       request,
       z.object({
         id: z.string(),
-        name: z.string().min(1),
+        title: z.string().min(1),
         description: z.string(),
       })
     );
 
     const project: Project = {
       id: request.id,
-      name: request.name,
+      title: request.title,
       description: request.description,
       userId: authContext.user.id,
     };
@@ -116,7 +116,7 @@ export class ProjectService implements IProjectService {
     validateRequest(
       request,
       z.object({
-        name: z.string().min(1).optional(),
+        title: z.string().min(1).optional(),
         description: z.string().optional(),
       })
     );
@@ -131,7 +131,7 @@ export class ProjectService implements IProjectService {
     }
 
     await this.projectRepository.update(params.projectId, {
-      name: request.name,
+      title: request.title,
       description: request.description,
     });
 

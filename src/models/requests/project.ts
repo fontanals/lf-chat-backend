@@ -4,12 +4,12 @@ export type GetProjectQuery = { expand?: string[] };
 
 export type CreateProjectRequest = {
   id: string;
-  name: string;
+  title: string;
   description: string;
 };
 
 export type UpdateProjectParams = { projectId: string };
 
-export type UpdateProjectRequest = { name?: string; description?: string };
+export type UpdateProjectRequest = { title?: string; description?: string };
 
 export type DeleteProjectParams = { projectId: string };

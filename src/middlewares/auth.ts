@@ -5,7 +5,6 @@ import {
   refreshTokenCookieOptions,
 } from "../utils/constants";
 import { ApplicationError } from "../utils/errors";
-import { errorResponse } from "../models/responses/response";
 
 export function authMiddleware(services: IServiceProvider): RequestHandler {
   return async (req, res, next) => {
@@ -48,16 +47,7 @@ export function authMiddleware(services: IServiceProvider): RequestHandler {
 
       next();
     } catch (error) {
-      console.error("AUTH ERROR: ", error);
-
-      const applicationError =
-        error instanceof ApplicationError
-          ? error
-          : ApplicationError.internalServerError();
-
-      const response = errorResponse(applicationError);
-
-      res.status(applicationError.getStatusCode()).json(response);
+      next(error);
     }
   };
 }

@@ -1,6 +1,6 @@
 export type UploadDocumentRequest = {
-  chatId?: string;
-  projectId?: string;
+  id: string;
+  projectId?: string | null;
 };
 
 export type DeleteDocumentParams = { documentId: string };

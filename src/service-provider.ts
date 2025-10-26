@@ -10,10 +10,6 @@ import {
   IDocumentChunkRepository,
 } from "./repositories/document-chunk";
 import { IMessageRepository, MessageRepository } from "./repositories/message";
-import {
-  IMessageAttachmentRepository,
-  MessageAttachmentRepository,
-} from "./repositories/message-attachment";
 import { IProjectRepository, ProjectRepository } from "./repositories/project";
 import {
   IRefreshTokenRepository,
@@ -39,7 +35,6 @@ type ServiceMap = {
   MessageRepository: IMessageRepository;
   DocumentRepository: IDocumentRepository;
   DocumentChunkRepository: IDocumentChunkRepository;
-  MessageAttachmentRepository: IMessageAttachmentRepository;
   DocumentManager: IDocumentManager;
   AssistantService: IAssistantService;
   AuthService: IAuthService;
@@ -188,12 +183,6 @@ export function registerServices(services: ServiceContainer, pool: Pool) {
   });
 
   services.register({
-    identifier: "MessageAttachmentRepository",
-    factory: (services) =>
-      new MessageAttachmentRepository(services.get("DataContext")),
-  });
-
-  services.register({
     identifier: "DocumentManager",
     factory: (services) =>
       new DocumentManager(
@@ -245,7 +234,6 @@ export function registerServices(services: ServiceContainer, pool: Pool) {
         services.get("DataContext"),
         services.get("ChatRepository"),
         services.get("MessageRepository"),
-        services.get("MessageAttachmentRepository"),
         services.get("AssistantService"),
         services.get("DocumentManager")
       ),

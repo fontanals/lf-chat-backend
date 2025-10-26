@@ -1,11 +1,11 @@
-import { randomUUID } from "crypto";
 import z from "zod";
 import { IDataContext } from "../data/context";
 import { Chat } from "../models/entities/chat";
-import { Document } from "../models/entities/document";
-import { DocumentChunk } from "../models/entities/document-chunk";
-import { Message } from "../models/entities/message";
-import { MessageAttachment } from "../models/entities/message-attachment";
+import {
+  Message,
+  SearchDocumentsToolInput,
+  SearchDocumentsToolOutput,
+} from "../models/entities/message";
 import {
   CreateChatRequest,
   DeleteChatParams,
@@ -16,19 +16,20 @@ import {
   SendMessageRequest,
   UpdateChatParams,
   UpdateChatRequest,
+  UpdateMessageParams,
+  UpdateMessageRequest,
 } from "../models/requests/chat";
 import {
-  ChatServerSentEvent,
   DeleteChatResponse,
   GetChatMessagesResponse,
   GetChatResponse,
   GetChatsResponse,
+  SendMessageEvent,
   UpdateChatResponse,
+  UpdateMessageResponse,
 } from "../models/responses/chat";
 import { IChatRepository } from "../repositories/chat";
 import { IMessageRepository } from "../repositories/message";
-import { IMessageAttachmentRepository } from "../repositories/message-attachment";
-import { ArrayUtils } from "../utils/arrays";
 import { ApplicationError } from "../utils/errors";
 import {
   getQueryDate,
@@ -56,19 +57,24 @@ export interface IChatService {
   createChat(
     request: CreateChatRequest,
     authContext: AuthContext,
-    onSendEvent: (event: ChatServerSentEvent) => void
+    onSendEvent: (event: SendMessageEvent) => void
   ): Promise<void>;
   sendMessage(
     params: SendMessageParams,
     request: SendMessageRequest,
     authContext: AuthContext,
-    onSendEvent: (event: ChatServerSentEvent) => void
+    onSendEvent: (event: SendMessageEvent) => void
   ): Promise<void>;
   updateChat(
     params: UpdateChatParams,
     request: UpdateChatRequest,
     authContext: AuthContext
   ): Promise<UpdateChatResponse>;
+  updateMessage(
+    params: UpdateMessageParams,
+    request: UpdateMessageRequest,
+    authContext: AuthContext
+  ): Promise<UpdateMessageResponse>;
   deleteChat(
     params: DeleteChatParams,
     authContext: AuthContext
@@ -79,7 +85,6 @@ export class ChatService implements IChatService {
   private readonly dataContext: IDataContext;
   private readonly chatRepository: IChatRepository;
   private readonly messageRepository: IMessageRepository;
-  private readonly messageAttachmentRepository: IMessageAttachmentRepository;
   private readonly assistantService: IAssistantService;
   private readonly documentManager: IDocumentManager;
 
@@ -87,14 +92,12 @@ export class ChatService implements IChatService {
     dataContext: IDataContext,
     chatRepository: IChatRepository,
     messageRepository: IMessageRepository,
-    messageAttachmentRepository: IMessageAttachmentRepository,
     assistantService: IAssistantService,
     documentManager: IDocumentManager
   ) {
     this.dataContext = dataContext;
     this.chatRepository = chatRepository;
     this.messageRepository = messageRepository;
-    this.messageAttachmentRepository = messageAttachmentRepository;
     this.assistantService = assistantService;
     this.documentManager = documentManager;
   }
@@ -114,8 +117,9 @@ export class ChatService implements IChatService {
     );
 
     return {
-      chats: paginatedChats.items,
-      totalChats: paginatedChats.totalItems,
+      items: paginatedChats.items,
+      totalItems: paginatedChats.totalItems,
+      nextCursor: paginatedChats.nextCursor?.toISOString(),
     };
   }
 
@@ -157,14 +161,14 @@ export class ChatService implements IChatService {
     const messagesMap: Record<string, Message> = {};
 
     messages.forEach((message) => {
-      message.childrenIds = [];
+      message.childrenMessageIds = [];
       messagesMap[message.id] = message;
 
-      if (message.parentId != null) {
-        const parentMessage = messagesMap[message.parentId];
+      if (message.parentMessageId != null) {
+        const parentMessage = messagesMap[message.parentMessageId];
 
         if (parentMessage != null) {
-          parentMessage.childrenIds!.push(message.id);
+          parentMessage.childrenMessageIds!.push(message.id);
         }
       } else {
         rootMessageIds.push(message.id);
@@ -176,8 +180,8 @@ export class ChatService implements IChatService {
     while (currentMessage != null) {
       latestPath.unshift(currentMessage.id);
       currentMessage =
-        currentMessage.parentId != null
-          ? messagesMap[currentMessage.parentId]
+        currentMessage.parentMessageId != null
+          ? messagesMap[currentMessage.parentMessageId]
           : undefined;
     }
 
@@ -187,21 +191,30 @@ export class ChatService implements IChatService {
   async createChat(
     request: CreateChatRequest,
     authContext: AuthContext,
-    onSendEvent: (event: ChatServerSentEvent) => void
+    onSendEvent: (event: SendMessageEvent) => void
   ): Promise<void> {
     validateRequest(
       request,
       z.object({
         id: z.string(),
-        message: z.string(),
-        attachmentIds: z.array(z.string()).optional(),
+        message: z.array(
+          z.discriminatedUnion("type", [
+            z.object({ type: z.literal("text"), text: z.string() }),
+            z.object({
+              type: z.literal("document"),
+              id: z.string(),
+              name: z.string(),
+              mimetype: z.string(),
+            }),
+          ])
+        ),
         projectId: z.string().nullable().optional(),
       })
     );
 
     const chat: Chat = {
       id: request.id,
-      title: "",
+      title: "New Chat",
       projectId: request.projectId,
       userId: authContext.user.id,
     };
@@ -210,7 +223,7 @@ export class ChatService implements IChatService {
       id: request.id,
       role: "user",
       content: request.message,
-      parentId: null,
+      parentMessageId: null,
       chatId: chat.id,
     };
 
@@ -222,36 +235,6 @@ export class ChatService implements IChatService {
       throw ApplicationError.userMessageViolatesContentPolicy();
     }
 
-    let projectDocumentChunks: DocumentChunk[] = [];
-    let userMessageDocuments: Document[] = [];
-
-    if (request.projectId != null) {
-      projectDocumentChunks =
-        await this.documentManager.getProjectRelevantDocumentChunks(
-          userMessage.content,
-          request.projectId
-        );
-    }
-
-    if (!ArrayUtils.isNullOrEmpty(request.attachmentIds)) {
-      userMessageDocuments = await this.documentManager.getDocuments(
-        request.attachmentIds!,
-        true
-      );
-
-      if (userMessageDocuments.length !== request.attachmentIds!.length) {
-        throw ApplicationError.badRequest();
-      }
-    }
-
-    const assistantMessage: Message = {
-      id: randomUUID(),
-      role: "assistant",
-      content: "",
-      parentId: userMessage.id,
-      chatId: chat.id,
-    };
-
     try {
       await this.dataContext.begin();
 
@@ -259,72 +242,61 @@ export class ChatService implements IChatService {
 
       await this.messageRepository.create(userMessage);
 
-      if (!ArrayUtils.isNullOrEmpty(userMessageDocuments)) {
-        const messageAttachments: MessageAttachment[] =
-          userMessageDocuments.map((document) => ({
-            messageId: userMessage.id,
-            documentId: document.id,
-          }));
-
-        await this.messageAttachmentRepository.createAll(messageAttachments);
-      }
-
       await this.dataContext.commit();
     } catch (error) {
       await this.dataContext.rollback();
       throw error;
     }
 
-    onSendEvent({
-      event: "start",
-      data: { messageId: assistantMessage.id },
-      isDone: false,
-    });
+    onSendEvent({ event: "start" });
 
-    const stream = await this.assistantService.sendMessage(
-      [userMessage],
-      [...projectDocumentChunks, ...userMessageDocuments]
+    const assistantMessage = await this.assistantService.sendMessage(
+      [],
+      userMessage,
+      (messagePart) =>
+        onSendEvent({
+          event: messagePart.type,
+          data: messagePart,
+        } as SendMessageEvent),
+      (input) => this.searchDocuments(input, chat.projectId!)
     );
-
-    for await (const chunk of stream) {
-      assistantMessage.content += chunk;
-
-      onSendEvent({
-        event: "delta",
-        data: { messageId: assistantMessage.id, delta: chunk },
-        isDone: false,
-      });
-    }
 
     await this.messageRepository.create(assistantMessage);
 
-    const chatTitle = await this.assistantService.generateChatTitle([
-      userMessage,
-      assistantMessage,
-    ]);
+    if (assistantMessage.finishReason === "stop") {
+      const chatTitle = await this.assistantService.generateChatTitle([
+        userMessage,
+        assistantMessage,
+      ]);
 
-    await this.chatRepository.update(chat.id, { title: chatTitle });
+      await this.chatRepository.update(chat.id, { title: chatTitle });
+    }
 
-    onSendEvent({
-      event: "end",
-      data: { messageId: assistantMessage.id },
-      isDone: true,
-    });
+    onSendEvent({ event: "end" });
   }
 
   async sendMessage(
     params: SendMessageParams,
     request: SendMessageRequest,
     authContext: AuthContext,
-    onSendEvent: (event: ChatServerSentEvent) => void
+    onSendEvent: (event: SendMessageEvent) => void
   ): Promise<void> {
     validateRequest(
       request,
       z.object({
         id: z.string(),
-        content: z.string(),
-        parentId: z.string().nullable().optional(),
-        attachmentIds: z.array(z.string()).optional(),
+        content: z.array(
+          z.discriminatedUnion("type", [
+            z.object({ type: z.literal("text"), text: z.string() }),
+            z.object({
+              type: z.literal("document"),
+              id: z.string(),
+              name: z.string(),
+              mimetype: z.string(),
+            }),
+          ])
+        ),
+        parentMessageId: z.string().nullable().optional(),
       })
     );
 
@@ -341,7 +313,7 @@ export class ChatService implements IChatService {
       id: request.id,
       role: "user",
       content: request.content,
-      parentId: request.parentId,
+      parentMessageId: request.parentMessageId,
       chatId: params.chatId,
     };
 
@@ -353,75 +325,37 @@ export class ChatService implements IChatService {
       throw ApplicationError.userMessageViolatesContentPolicy();
     }
 
-    const assistantMessage: Message = {
-      id: randomUUID(),
-      role: "assistant",
-      content: "",
-      parentId: userMessage.id,
-      chatId: params.chatId,
-    };
-
     const previousMessages = await this.messageRepository.findAll({
       chatId: params.chatId,
     });
 
-    const previousDocuments = await this.documentManager.getChatDocuments(
-      params.chatId,
-      true
-    );
-
-    let projectDocumentChunks: DocumentChunk[] = [];
-    let userMessageDocuments: Document[] = [];
-
-    if (chat.projectId != null) {
-      projectDocumentChunks =
-        await this.documentManager.getProjectRelevantDocumentChunks(
-          userMessage.content,
-          chat.projectId
-        );
-    }
-
-    if (!ArrayUtils.isNullOrEmpty(request.attachmentIds)) {
-      userMessageDocuments = await this.documentManager.getDocuments(
-        request.attachmentIds!,
-        true
-      );
-
-      if (userMessageDocuments.length !== request.attachmentIds!.length) {
-        throw ApplicationError.badRequest();
-      }
-    }
-
     await this.messageRepository.create(userMessage);
 
-    onSendEvent({
-      event: "start",
-      data: { messageId: assistantMessage.id },
-      isDone: false,
-    });
+    onSendEvent({ event: "start" });
 
-    const stream = await this.assistantService.sendMessage(
-      [...previousMessages, userMessage],
-      [...projectDocumentChunks, ...previousDocuments, ...userMessageDocuments]
+    const assistantMessage = await this.assistantService.sendMessage(
+      previousMessages,
+      userMessage,
+      (messagePart) =>
+        onSendEvent({
+          event: messagePart.type,
+          data: messagePart,
+        } as SendMessageEvent),
+      (input) => this.searchDocuments(input, chat.projectId!)
     );
-
-    for await (const chunk of stream) {
-      assistantMessage.content += chunk;
-
-      onSendEvent({
-        event: "delta",
-        data: { messageId: assistantMessage.id, delta: chunk },
-        isDone: false,
-      });
-    }
 
     await this.messageRepository.create(assistantMessage);
 
-    onSendEvent({
-      event: "end",
-      data: { messageId: assistantMessage.id },
-      isDone: true,
-    });
+    if (assistantMessage.finishReason === "stop" && chat.title === "New Chat") {
+      const chatTitle = await this.assistantService.generateChatTitle([
+        userMessage,
+        assistantMessage,
+      ]);
+
+      await this.chatRepository.update(chat.id, { title: chatTitle });
+    }
+
+    onSendEvent({ event: "end" });
   }
 
   async updateChat(
@@ -445,6 +379,45 @@ export class ChatService implements IChatService {
     return params.chatId;
   }
 
+  async updateMessage(
+    params: UpdateMessageParams,
+    request: UpdateMessageRequest,
+    authContext: AuthContext
+  ): Promise<UpdateMessageResponse> {
+    validateRequest(
+      request,
+      z.object({
+        feedback: z.enum(["like", "dislike", "neutral"]).nullable().optional(),
+      })
+    );
+
+    const chatExists = await this.chatRepository.exists({
+      id: params.chatId,
+      userId: authContext.user.id,
+    });
+
+    if (!chatExists) {
+      console.log("CHAT NOT FOUND");
+      throw ApplicationError.notFound();
+    }
+
+    const messageExists = await this.messageRepository.exists({
+      id: params.messageId,
+      chatId: params.chatId,
+    });
+
+    if (!messageExists) {
+      console.log("MESSAGE NOT FOUND");
+      throw ApplicationError.notFound();
+    }
+
+    await this.messageRepository.update(params.messageId, {
+      feedback: request.feedback,
+    });
+
+    return params.messageId;
+  }
+
   async deleteChat(
     params: DeleteChatParams,
     authContext: AuthContext
@@ -461,5 +434,42 @@ export class ChatService implements IChatService {
     await this.chatRepository.delete(params.chatId);
 
     return params.chatId;
+  }
+
+  async searchDocuments(
+    input: SearchDocumentsToolInput,
+    chatId?: string,
+    projectId?: string
+  ): Promise<SearchDocumentsToolOutput> {
+    if (chatId == null && projectId == null) {
+      throw new Error(
+        "Either chatId or projectId must be provided to search documents."
+      );
+    }
+
+    try {
+      const documentChunks =
+        await this.documentManager.searchRelevantDocumentChunks(
+          input.query,
+          chatId,
+          projectId,
+          true
+        );
+
+      const data = documentChunks
+        .map(
+          (documentChunk) => `<documentChunk>
+            <sourceDocumentName>${
+              documentChunk.document!.name
+            }</sourceDocumentName>
+            <content>${documentChunk.content}</content>
+          </documentChunk>`
+        )
+        .join("\n");
+
+      return { success: true, data };
+    } catch (error) {
+      return { success: false, error: (error as Error).message };
+    }
   }
 }

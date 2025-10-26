@@ -57,7 +57,7 @@ export class DocumentService implements IDocumentService {
       const document = await this.documentManager.createDocument(
         file,
         authContext.user.id,
-        request.chatId,
+        null,
         request.projectId
       );
 
@@ -70,6 +70,7 @@ export class DocumentService implements IDocumentService {
       return document.id;
     } catch (error) {
       await this.dataContext.rollback();
+
       throw error;
     }
   }

@@ -5,6 +5,7 @@ import {
   GetChatParams,
   SendMessageParams,
   UpdateChatParams,
+  UpdateMessageParams,
 } from "../models/requests/chat";
 import { ServiceContainer } from "../service-provider";
 import { jsonRequestHandler, sseRequestHandler } from "../utils/express";
@@ -53,27 +54,31 @@ export function createChatRoutes(serviceContainer: ServiceContainer) {
 
   router.post(
     "/",
-    sseRequestHandler(serviceContainer, async (req, res, services) => {
-      const chatService = services.get("ChatService");
+    sseRequestHandler(
+      serviceContainer,
+      async (req, res, services, onSendEvent) => {
+        const chatService = services.get("ChatService");
 
-      await chatService.createChat(req.body, req.authContext, (event) =>
-        res.write(`data: ${JSON.stringify(event)}\n\n`)
-      );
-    })
+        await chatService.createChat(req.body, req.authContext, onSendEvent);
+      }
+    )
   );
 
   router.post(
     "/:chatId/messages",
-    sseRequestHandler(serviceContainer, async (req, res, services) => {
-      const chatService = services.get("ChatService");
+    sseRequestHandler(
+      serviceContainer,
+      async (req, res, services, onSendEvent) => {
+        const chatService = services.get("ChatService");
 
-      await chatService.sendMessage(
-        req.params as SendMessageParams,
-        req.body,
-        req.authContext,
-        (event) => res.write(`data: ${JSON.stringify(event)}\n\n`)
-      );
-    })
+        await chatService.sendMessage(
+          req.params as SendMessageParams,
+          req.body,
+          req.authContext,
+          onSendEvent
+        );
+      }
+    )
   );
 
   router.patch(
@@ -83,6 +88,21 @@ export function createChatRoutes(serviceContainer: ServiceContainer) {
 
       const response = await chatService.updateChat(
         req.params as UpdateChatParams,
+        req.body,
+        req.authContext
+      );
+
+      return response;
+    })
+  );
+
+  router.patch(
+    "/:chatId/messages/:messageId",
+    jsonRequestHandler(serviceContainer, async (req, res, services) => {
+      const chatService = services.get("ChatService");
+
+      const response = await chatService.updateMessage(
+        req.params as UpdateMessageParams,
         req.body,
         req.authContext
       );

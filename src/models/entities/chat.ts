@@ -1,3 +1,5 @@
+import { Project } from "./project";
+
 export type Chat = {
   id: string;
   title: string;
@@ -5,4 +7,5 @@ export type Chat = {
   userId: string;
   createdAt?: Date;
   updatedAt?: Date;
+  project?: Project | null;
 };

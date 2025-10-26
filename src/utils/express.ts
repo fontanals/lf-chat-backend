@@ -1,7 +1,7 @@
 import { isValid } from "date-fns";
 import { Request, RequestHandler, Response } from "express";
 import { ZodType } from "zod";
-import { errorResponse, successResponse } from "../models/responses/response";
+import { successResponse } from "../models/responses/response";
 import { IServiceProvider, ServiceContainer } from "../service-provider";
 import { ApplicationError } from "./errors";
 import { ServerSentEvent } from "./types";
@@ -75,7 +75,7 @@ export function jsonRequestHandler(
     services: IServiceProvider
   ) => Promise<any>
 ): RequestHandler {
-  return async (req, res) => {
+  return async (req, res, next) => {
     res.header("Content-Type", "application/json; charset=utf-8");
     res.header("Access-Control-Expose-Headers", "Authorization");
 
@@ -88,16 +88,7 @@ export function jsonRequestHandler(
 
       res.json(response);
     } catch (error) {
-      console.error("ERROR: ", error);
-
-      const applicationError =
-        error instanceof ApplicationError
-          ? error
-          : ApplicationError.internalServerError();
-
-      const response = errorResponse(applicationError);
-
-      res.status(applicationError.getStatusCode()).json(response);
+      next(error);
     }
   };
 }
@@ -107,21 +98,34 @@ export function sseRequestHandler(
   handler: (
     req: Request,
     res: Response,
-    services: IServiceProvider
+    services: IServiceProvider,
+    onSendEvent: (event: ServerSentEvent) => void
   ) => Promise<void>
 ): RequestHandler {
-  return async (req, res) => {
-    res.header("Content-Type", "text/event-stream; charset=utf-8");
-    res.header("Cache-Control", "no-cache");
-    res.header("Connection", "keep-alive");
-    res.header("Access-Control-Expose-Headers", "Authorization");
+  return async (req, res, next) => {
+    let hasStartedStreaming = false;
 
     try {
       const scope = serviceContainer.createScope();
 
-      await handler(req, res, scope);
+      await handler(req, res, scope, (event) => {
+        if (event.event === "start") {
+          res.header("Content-Type", "text/event-stream; charset=utf-8");
+          res.header("Cache-Control", "no-cache");
+          res.header("Connection", "keep-alive");
+          res.header("Access-Control-Expose-Headers", "Authorization");
+
+          hasStartedStreaming = true;
+        }
+
+        res.write(`data: ${JSON.stringify(event)}\n\n`);
+      });
+
+      res.end();
     } catch (error) {
-      console.error("ERROR: ", error);
+      if (!hasStartedStreaming) {
+        return next(error);
+      }
 
       const appliationError =
         error instanceof ApplicationError
@@ -131,11 +135,10 @@ export function sseRequestHandler(
       const event: ServerSentEvent<"error", ApplicationError> = {
         event: "error",
         data: appliationError,
-        isDone: true,
       };
 
       res.write(`data: ${JSON.stringify(event)}\n\n`);
-    } finally {
+
       res.end();
     }
   };

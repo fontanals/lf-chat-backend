@@ -46,7 +46,7 @@ EXECUTE FUNCTION set_updated_at();
 
 CREATE TABLE "project" (
     "id" uuid PRIMARY KEY,
-    "name" text NOT NULL,
+    "title" text NOT NULL,
     "description" text NOT NULL,
     "created_at" timestamp with time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updated_at" timestamp with time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -63,7 +63,7 @@ CREATE TABLE "chat" (
     "title" text NOT NULL,
     "created_at" timestamp with time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updated_at" timestamp with time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "project_id" uuid REFERENCES "project"("id") ON DELETE SET NULL,
+    "project_id" uuid REFERENCES "project"("id") ON DELETE CASCADE,
     "user_id" uuid NOT NULL REFERENCES "user"("id") ON DELETE CASCADE
 );
 
@@ -73,15 +73,18 @@ FOR EACH ROW
 EXECUTE FUNCTION set_updated_at();
 
 CREATE TYPE "message_role" AS ENUM ('user', 'assistant');
+CREATE TYPE "message_feedback" AS ENUM ('like', 'dislike', 'neutral');
+CREATE TYPE "message_finish_reason" AS ENUM ('stop', 'length', 'content-filter', 'tool-calls', 'other', 'unknown');
 
 CREATE TABLE "message" (
     "id" uuid PRIMARY KEY,
     "role" message_role NOT NULL,
-    "content" text NOT NULL,
-    "is_liked" boolean,
+    "content" jsonb NOT NULL,
+    "feedback" message_feedback,
+    "finish_reason" message_finish_reason,
     "created_at" timestamp with time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updated_at" timestamp with time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "parent_id" uuid REFERENCES "message"("id") ON DELETE CASCADE,
+    "parent_message_id" uuid REFERENCES "message"("id") ON DELETE CASCADE,
     "chat_id" uuid NOT NULL REFERENCES "chat"("id") ON DELETE CASCADE
 );
 
@@ -98,8 +101,8 @@ CREATE TABLE "document" (
     "size" integer NOT NULL,
     "created_at" timestamp with time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updated_at" timestamp with time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "chat_id" uuid REFERENCES "chat"("id") ON DELETE SET NULL,
-    "project_id" uuid REFERENCES "project"("id") ON DELETE SET NULL,
+    "chat_id" uuid REFERENCES "chat"("id") ON DELETE CASCADE,
+    "project_id" uuid REFERENCES "project"("id") ON DELETE CASCADE,
     "user_id" uuid NOT NULL REFERENCES "user"("id") ON DELETE CASCADE
 );
 
@@ -116,11 +119,3 @@ CREATE TABLE "document_chunk" (
     "created_at" timestamp with time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "document_id" uuid NOT NULL REFERENCES "document"("id") ON DELETE CASCADE
 );
-
-CREATE TABLE "message_attachment" (
-    "message_id" uuid NOT NULL REFERENCES "message"("id") ON DELETE CASCADE,
-    "document_id" uuid NOT NULL REFERENCES "document"("id") ON DELETE CASCADE,
-    PRIMARY KEY ("message_id", "document_id")
-);
-
-

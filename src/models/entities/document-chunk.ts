@@ -1,3 +1,5 @@
+import { Document } from "./document";
+
 export type DocumentChunk = {
   id: string;
   index: number;
@@ -5,4 +7,5 @@ export type DocumentChunk = {
   embedding: number[];
   documentId: string;
   createdAt?: Date;
+  document?: Document;
 };

@@ -8,7 +8,7 @@ type ProjectFilters = NullablePartial<Project & { includeDocuments: boolean }>;
 
 type ProjectQueryRow = {
   projectId: string;
-  projectName: string;
+  projectTitle: string;
   projectDescription: string;
   projectUserId: string;
   projectCreatedAt?: Date;
@@ -18,7 +18,7 @@ type ProjectQueryRow = {
   documentPath?: string;
   documentMimetype?: string;
   documentSize?: number;
-  documentChatId?: string | null;
+  documentchatId?: string | null;
   documentProjectId?: string | null;
   documentUserId?: string;
   documentCreatedAt?: Date;
@@ -49,13 +49,13 @@ export class ProjectRepository implements IProjectRepository {
       FROM "project"
       WHERE
         ${filters?.id != null ? `id = $${++paramsCount} AND` : ""}
-        ${filters?.name != null ? `name ILIKE $${++paramsCount} AND` : ""}
+        ${filters?.title != null ? `title ILIKE $${++paramsCount} AND` : ""}
         ${filters?.userId != null ? `user_id = $${++paramsCount} AND` : ""}
         TRUE
       LIMIT 1;`,
       [
         filters?.id,
-        filters?.name != null ? `%${filters.name}%` : null,
+        filters?.title != null ? `%${filters.title}%` : null,
         filters?.userId,
       ].filter((param) => param != null)
     );
@@ -71,7 +71,7 @@ export class ProjectRepository implements IProjectRepository {
     const result = await this.dataContext.query<ProjectQueryRow>(
       `SELECT
         project.id AS "projectId",
-        project.name AS "projectName",
+        project.title AS "projectTitle",
         project.description AS "projectDescription",
         project.user_id AS "projectUserId",
         project.created_at AS "projectCreatedAt",
@@ -83,7 +83,7 @@ export class ProjectRepository implements IProjectRepository {
               document.path AS "documentPath",
               document.mimetype AS "documentMimetype",
               document.size AS "documentSize",
-              document.chat_id AS "documentChatId",
+              document.chat_id AS "documentchatId",
               document.project_id AS "documentProjectId",
               document.user_id AS "documentUserId",
               document.created_at AS "documentCreatedAt",
@@ -99,8 +99,8 @@ export class ProjectRepository implements IProjectRepository {
       WHERE
         ${filters?.id != null ? `project.id = $${++paramsCount} AND` : ""}
         ${
-          filters?.name != null
-            ? `project.name ILIKE $${++paramsCount} AND`
+          filters?.title != null
+            ? `project.title ILIKE $${++paramsCount} AND`
             : ""
         }
         ${
@@ -113,7 +113,7 @@ export class ProjectRepository implements IProjectRepository {
       ${filters?.includeDocuments ? ", document.created_at" : ""};`,
       [
         filters?.id,
-        filters?.name != null ? `%${filters.name}%` : null,
+        filters?.title != null ? `%${filters.title}%` : null,
         filters?.userId,
       ].filter((param) => param != null)
     );
@@ -135,14 +135,14 @@ export class ProjectRepository implements IProjectRepository {
         FROM "project"
         WHERE
           ${filters?.id != null ? `id = $${++paramsCount} AND` : ""}
-          ${filters?.name != null ? `name ILIKE $${++paramsCount} AND` : ""}
+          ${filters?.title != null ? `title ILIKE $${++paramsCount} AND` : ""}
           ${filters?.userId != null ? `user_id = $${++paramsCount} AND` : ""}
           TRUE
         LIMIT 1
       )
       SELECT
         project_cte.id AS "projectId",
-        project_cte.name AS "projectName",
+        project_cte.title AS "projectTitle",
         project_cte.description AS "projectDescription",
         project_cte.user_id AS "projectUserId",
         project_cte.created_at AS "projectCreatedAt",
@@ -154,7 +154,7 @@ export class ProjectRepository implements IProjectRepository {
               document.path AS "documentPath",
               document.mimetype AS "documentMimetype",
               document.size AS "documentSize",
-              document.chat_id AS "documentChatId",
+              document.chat_id AS "documentchatId",
               document.project_id AS "documentProjectId",
               document.user_id AS "documentUserId",
               document.created_at AS "documentCreatedAt",
@@ -171,7 +171,7 @@ export class ProjectRepository implements IProjectRepository {
       ${filters?.includeDocuments ? ", document.created_at" : ""};`,
       [
         filters?.id,
-        filters?.name != null ? `%${filters.name}%` : null,
+        filters?.title != null ? `%${filters.title}%` : null,
         filters?.userId,
       ].filter((param) => param != null)
     );
@@ -189,10 +189,10 @@ export class ProjectRepository implements IProjectRepository {
   async create(project: Project): Promise<void> {
     await this.dataContext.execute(
       `INSERT INTO "project"
-      (id, name, description, user_id)
+      (id, title, description, user_id)
       VALUES
       ($1, $2, $3, $4);`,
-      [project.id, project.name, project.description, project.userId]
+      [project.id, project.title, project.description, project.userId]
     );
   }
 
@@ -202,12 +202,12 @@ export class ProjectRepository implements IProjectRepository {
     await this.dataContext.execute(
       `UPDATE "project"
       SET
-        ${project.name != null ? `name = $${++paramsCount},` : ""}
+        ${project.title != null ? `name = $${++paramsCount},` : ""}
         ${project.description != null ? `description = $${++paramsCount},` : ""}
         id = id
       WHERE
         id = $${++paramsCount};`,
-      [project.name, project.description, id].filter((param) => param != null)
+      [project.title, project.description, id].filter((param) => param != null)
     );
   }
 
@@ -223,7 +223,7 @@ export class ProjectRepository implements IProjectRepository {
   private mapRowToProject(row: ProjectQueryRow): Project {
     return {
       id: row.projectId,
-      name: row.projectName,
+      title: row.projectTitle,
       description: row.projectDescription,
       userId: row.projectUserId,
       createdAt: row.projectCreatedAt,
@@ -242,7 +242,7 @@ export class ProjectRepository implements IProjectRepository {
       path: row.documentPath ?? "",
       mimetype: row.documentMimetype ?? "",
       size: row.documentSize ?? 0,
-      chatId: row.documentChatId,
+      chatId: row.documentchatId,
       projectId: row.documentProjectId,
       userId: row.documentUserId ?? "",
       createdAt: row.documentCreatedAt,

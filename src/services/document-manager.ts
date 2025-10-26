@@ -10,13 +10,11 @@ import { IAssistantService } from "./assistant";
 
 export interface IDocumentManager {
   getDocuments(ids: string[], includeContent?: boolean): Promise<Document[]>;
-  getChatDocuments(
-    chatId: string,
-    includeContent?: boolean
-  ): Promise<Document[]>;
-  getProjectRelevantDocumentChunks(
+  searchRelevantDocumentChunks(
     query: string,
-    projectId: string
+    chatId?: string,
+    projectId?: string,
+    includeDocument?: boolean
   ): Promise<DocumentChunk[]>;
   getDocument(
     id: string,
@@ -26,8 +24,8 @@ export interface IDocumentManager {
   createDocument(
     file: Express.Multer.File,
     userId: string,
-    chatId?: string,
-    projectId?: string
+    chatId?: string | null,
+    projectId?: string | null
   ): Promise<Document>;
   processDocument(document: Document): Promise<string>;
   updateDocument(document: Document): Promise<string>;
@@ -62,26 +60,18 @@ export class DocumentManager implements IDocumentManager {
     return documents;
   }
 
-  async getChatDocuments(
-    chatId: string,
-    includeContent?: boolean
-  ): Promise<Document[]> {
-    const documents = await this.documentRepository.findAll({ chatId });
-
-    if (includeContent) {
-      await this.getDocumentsContent(documents);
-    }
-
-    return documents;
-  }
-
-  async getProjectRelevantDocumentChunks(
+  async searchRelevantDocumentChunks(
     query: string,
-    projectId: string
+    chatId?: string,
+    projectId?: string,
+    includeDocument?: boolean
   ): Promise<DocumentChunk[]> {
     const relevantDocumentChunks =
       await this.documentChunkRepository.findRelevant(query, 0.5, {
+        chatId,
         projectId,
+        limit: 5,
+        includeDocument,
       });
 
     return relevantDocumentChunks;
@@ -104,8 +94,8 @@ export class DocumentManager implements IDocumentManager {
   async createDocument(
     file: Express.Multer.File,
     userId: string,
-    chatId?: string,
-    projectId?: string
+    chatId?: string | null,
+    projectId?: string | null
   ): Promise<Document> {
     const document: Document = {
       id: randomUUID(),

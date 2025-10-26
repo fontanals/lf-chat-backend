@@ -1,11 +1,35 @@
 import { IDataContext } from "../data/context";
+import { Document } from "../models/entities/document";
 import { DocumentChunk } from "../models/entities/document-chunk";
 import { ArrayUtils } from "../utils/arrays";
 import { SqlUtils } from "../utils/sql";
 import { NullablePartial } from "../utils/types";
 
+type DocumentChunkQueryRow = {
+  documentChunkId: string;
+  documentChunkIndex: number;
+  documentChunkContent: string;
+  documentChunkDocumentId: string;
+  documentChunkCreatedAt?: Date;
+  documentId?: string;
+  documentName?: string;
+  documentPath?: string;
+  documentMimetype?: string;
+  documentSize?: number;
+  documentMessageId?: string | null;
+  documentProjectId?: string | null;
+  documentUserId?: string;
+  documentCreatedAt?: Date;
+  documentUdpatedAt?: Date;
+};
+
 export type DocumentChunkFilters = NullablePartial<
-  DocumentChunk & { projectId: string; limit: number }
+  DocumentChunk & {
+    chatId: string;
+    projectId: string;
+    limit: number;
+    includeDocument: boolean;
+  }
 >;
 
 export interface IDocumentChunkRepository {
@@ -31,18 +55,31 @@ export class DocumentChunkRepository implements IDocumentChunkRepository {
   ): Promise<DocumentChunk[]> {
     let paramsCount = 0;
 
-    const result = await this.dataContext.query<DocumentChunk>(
+    const result = await this.dataContext.query<DocumentChunkQueryRow>(
       `SELECT
         document_chunk.id,
         document_chunk.index,
         document_chunk.content,
-        document_chunk.embedding,
         document_chunk.document_id AS "documentId",
         document_chunk.created_at AS "createdAt",
+        ${
+          filters?.includeDocument
+            ? `document.id AS "documentId",
+              document.name AS "documentName",
+              document.path AS "documentPath",
+              document.mimetype AS "documentMimetype",
+              document.size AS "documentSize",
+              document.message_id AS "documentMessageId",
+              document.project_id AS "documentProjectId",
+              document.user_id AS "documentUserId",
+              document.created_at AS "documentCreatedAt",
+              document.updated_at AS "documentUpdatedAt",`
+            : ""
+        }
         1 - (document_chunk.embedding <-> $${++paramsCount}) AS distance
       FROM "document_chunk"
       ${
-        filters?.projectId != null
+        filters?.chatId != null || filters?.projectId != null
           ? "JOIN document ON document.id = document_chunk.document_id"
           : ""
       }
@@ -50,6 +87,11 @@ export class DocumentChunkRepository implements IDocumentChunkRepository {
         ${
           filters?.documentId != null
             ? `document_chunk.document_id = $${++paramsCount} AND`
+            : ""
+        }
+        ${
+          filters?.chatId != null
+            ? `document.chat_id = $${++paramsCount} AND`
             : ""
         }
         ${
@@ -62,6 +104,7 @@ export class DocumentChunkRepository implements IDocumentChunkRepository {
       ${filters?.limit != null ? `LIMIT $${++paramsCount}` : ""};`,
       [
         filters?.documentId,
+        filters?.chatId,
         filters?.projectId,
         query,
         threshold,
@@ -69,7 +112,12 @@ export class DocumentChunkRepository implements IDocumentChunkRepository {
       ].filter((param) => param != null)
     );
 
-    return result.rows;
+    const documentChunks = this.mapRowsToDocumentChunks(
+      result.rows,
+      Boolean(filters?.includeDocument)
+    );
+
+    return documentChunks;
   }
 
   async createAll(documentChunks: DocumentChunk[]): Promise<void> {
@@ -81,7 +129,7 @@ export class DocumentChunkRepository implements IDocumentChunkRepository {
       documentChunk.id,
       documentChunk.index,
       documentChunk.content,
-      SqlUtils.vectorToSql(documentChunk.embedding),
+      JSON.stringify(documentChunk.embedding),
       documentChunk.documentId,
     ]);
 
@@ -92,5 +140,41 @@ export class DocumentChunkRepository implements IDocumentChunkRepository {
       ${SqlUtils.values(documentChunks.length, 5)};`,
       params
     );
+  }
+
+  mapRowToDocumentChunk(
+    row: DocumentChunkQueryRow,
+    includeDocument: boolean
+  ): DocumentChunk {
+    return {
+      id: row.documentChunkId,
+      index: row.documentChunkIndex,
+      content: row.documentChunkContent,
+      documentId: row.documentChunkDocumentId,
+      embedding: [],
+      document: includeDocument ? this.mapRowToDocument(row) : undefined,
+    };
+  }
+
+  mapRowToDocument(row: DocumentChunkQueryRow): Document {
+    return {
+      id: row.documentId!,
+      name: row.documentName!,
+      path: row.documentPath!,
+      mimetype: row.documentMimetype!,
+      size: row.documentSize!,
+      chatId: row.documentMessageId ?? null,
+      projectId: row.documentProjectId ?? null,
+      userId: row.documentUserId!,
+      createdAt: row.documentCreatedAt,
+      udpatedAt: row.documentUdpatedAt,
+    };
+  }
+
+  mapRowsToDocumentChunks(
+    rows: DocumentChunkQueryRow[],
+    includeDocument: boolean
+  ): DocumentChunk[] {
+    return rows.map((row) => this.mapRowToDocumentChunk(row, includeDocument));
   }
 }

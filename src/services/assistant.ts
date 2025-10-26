@@ -1,6 +1,13 @@
-import { Document } from "../models/entities/document";
-import { DocumentChunk } from "../models/entities/document-chunk";
-import { Message } from "../models/entities/message";
+import { randomUUID } from "crypto";
+import {
+  AssistantMessage,
+  Message,
+  MessagePart,
+  SearchDocumentsToolInput,
+  SearchDocumentsToolOutput,
+  UserMessage,
+} from "../models/entities/message";
+import { PromiseUtils } from "../utils/promises";
 
 const mockChats = [
   {
@@ -106,26 +113,40 @@ const mockChats = [
 ];
 
 export interface IAssistantService {
+  generateEmbedding(text: string): Promise<number[]>;
   generateChatTitle(messages: Message[]): Promise<string>;
   validateMessage(message: Message): Promise<boolean>;
   sendMessage(
-    messages: Message[],
-    documents: (Document | DocumentChunk)[]
-  ): Promise<AsyncIterable<string>>;
-  generateEmbedding(text: string): Promise<number[]>;
+    previousMessages: Message[],
+    message: UserMessage,
+    onMessagePart: (messagePart: MessagePart) => void,
+    onSearchDocuments?: (
+      input: SearchDocumentsToolInput
+    ) => Promise<SearchDocumentsToolOutput>
+  ): Promise<AssistantMessage>;
 }
 
 export class AssistantService implements IAssistantService {
+  async generateEmbedding(text: string): Promise<number[]> {
+    return Array.from({ length: 1536 }, () => 0.0);
+  }
+
   async generateChatTitle(messages: Message[]): Promise<string> {
     const assistantMessage = messages.find(
       (message) => message.role === "assistant"
     );
 
-    const chatIndex = mockChats.findIndex(
-      (chat) => chat.message === assistantMessage?.content
+    const textContentBlock = assistantMessage?.content.find(
+      (contentBlock) => contentBlock.type === "text"
     );
 
-    return chatIndex > -1 ? mockChats[chatIndex].title : "New Chat";
+    const mockChatIndex = mockChats.findIndex(
+      (chat) => chat.message === textContentBlock?.text
+    );
+
+    return mockChatIndex > -1
+      ? mockChats[mockChatIndex].title
+      : "Imagine a title here ✨";
   }
 
   async validateMessage(message: Message): Promise<boolean> {
@@ -133,29 +154,60 @@ export class AssistantService implements IAssistantService {
   }
 
   async sendMessage(
-    messages: Message[],
-    documents: (Document | DocumentChunk)[]
-  ): Promise<AsyncIterable<string>> {
-    const chat = mockChats[Math.floor(Math.random() * mockChats.length)];
-
-    return {
-      [Symbol.asyncIterator]: async function* () {
-        const chunks = chat.message.split(" ");
-
-        let index = 0;
-
-        for (const chunk of chunks) {
-          yield index < chunks.length - 1 ? chunk + " " : chunk;
-
-          index++;
-
-          await new Promise((resolve) => setTimeout(resolve, 30));
-        }
-      },
+    previousMessages: Message[],
+    message: UserMessage,
+    onMessagePart: (messagePart: MessagePart) => void,
+    onSearchDocuments?: (
+      input: SearchDocumentsToolInput
+    ) => Promise<SearchDocumentsToolOutput>
+  ): Promise<AssistantMessage> {
+    const response: AssistantMessage = {
+      id: randomUUID(),
+      role: "assistant",
+      content: [],
+      feedback: null,
+      finishReason: "stop",
+      parentMessageId: message.id,
+      chatId: message.chatId,
     };
-  }
 
-  async generateEmbedding(text: string): Promise<number[]> {
-    return Array.from({ length: 1536 }, () => 0.0);
+    const mockChat = mockChats[Math.floor(Math.random() * mockChats.length)];
+
+    onMessagePart({ type: "message-start", messageId: response.id });
+
+    await PromiseUtils.sleep(50);
+
+    onMessagePart({ type: "text-start", messageId: response.id });
+
+    await PromiseUtils.sleep(50);
+
+    const textParts = mockChat.message.split(" ");
+
+    for (let index = 0; index < textParts.length; index++) {
+      onMessagePart({
+        type: "text-delta",
+        messageId: response.id,
+        delta:
+          index < textParts.length - 1
+            ? textParts[index] + " "
+            : textParts[index],
+      });
+
+      await PromiseUtils.sleep(50);
+    }
+
+    onMessagePart({ type: "text-end", messageId: response.id });
+
+    response.content.push({ type: "text", text: mockChat.message });
+
+    await PromiseUtils.sleep(50);
+
+    onMessagePart({
+      type: "message-end",
+      messageId: response.id,
+      finishReason: "stop",
+    });
+
+    return response;
   }
 }
