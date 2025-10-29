@@ -1,35 +1,38 @@
 import { randomUUID } from "crypto";
-import fs from "fs/promises";
+import path from "path";
 import parsePdf from "pdf-parse";
 import { config } from "../config";
 import { Document } from "../models/entities/document";
 import { DocumentChunk } from "../models/entities/document-chunk";
-import { IDocumentRepository } from "../repositories/document";
-import { IDocumentChunkRepository } from "../repositories/document-chunk";
+import { DocumentFilters, IDocumentRepository } from "../repositories/document";
+import {
+  DocumentChunkFilters,
+  IDocumentChunkRepository,
+} from "../repositories/document-chunk";
+import { FileSystemUtils } from "../utils/file-system";
+import { NullablePartial } from "../utils/types";
 import { IAssistantService } from "./assistant";
 
 export interface IDocumentManager {
-  getDocuments(ids: string[], includeContent?: boolean): Promise<Document[]>;
-  searchRelevantDocumentChunks(
-    query: string,
-    chatId?: string,
-    projectId?: string,
-    includeDocument?: boolean
-  ): Promise<DocumentChunk[]>;
-  getDocument(
-    id: string,
-    userId?: string,
-    includeContent?: boolean
-  ): Promise<Document | null>;
-  createDocument(
-    file: Express.Multer.File,
-    userId: string,
-    chatId?: string | null,
+  documentExists(filters?: DocumentFilters): Promise<boolean>;
+  getDocuments(filters?: DocumentFilters): Promise<Document[]>;
+  getChatAndProjectDocuments(
+    chatId: string,
     projectId?: string | null
-  ): Promise<Document>;
-  processDocument(document: Document): Promise<string>;
-  updateDocument(document: Document): Promise<string>;
-  deleteDocument(document: Document): Promise<string>;
+  ): Promise<Document[]>;
+  getDocument(filters?: DocumentFilters): Promise<Document | null>;
+  getRelevantDocumentChunks(
+    query: string,
+    threshold: number,
+    filters?: DocumentChunkFilters
+  ): Promise<DocumentChunk[]>;
+  createDocument(document: Document, file: Express.Multer.File): Promise<void>;
+  processDocument(id: string): Promise<void>;
+  updateDocument(
+    id: string,
+    document: NullablePartial<Document>
+  ): Promise<void>;
+  deleteDocument(id: string): Promise<void>;
 }
 
 export class DocumentManager implements IDocumentManager {
@@ -47,133 +50,133 @@ export class DocumentManager implements IDocumentManager {
     this.assistantService = assistantService;
   }
 
-  async getDocuments(
-    ids: string[],
-    includeContent = false
-  ): Promise<Document[]> {
-    const documents = await this.documentRepository.findAll({ ids });
+  async documentExists(filters?: DocumentFilters): Promise<boolean> {
+    const exists = await this.documentRepository.exists(filters);
 
-    if (includeContent) {
-      await this.getDocumentsContent(documents);
-    }
+    return exists;
+  }
+
+  async getDocuments(filters?: DocumentFilters): Promise<Document[]> {
+    const documents = await this.documentRepository.findAll(filters);
 
     return documents;
   }
 
-  async searchRelevantDocumentChunks(
-    query: string,
-    chatId?: string,
-    projectId?: string,
-    includeDocument?: boolean
-  ): Promise<DocumentChunk[]> {
-    const relevantDocumentChunks =
-      await this.documentChunkRepository.findRelevant(query, 0.5, {
-        chatId,
-        projectId,
-        limit: 5,
-        includeDocument,
-      });
-
-    return relevantDocumentChunks;
-  }
-
-  async getDocument(
-    id: string,
-    userId?: string,
-    includeContent?: boolean
-  ): Promise<Document | null> {
-    const document = await this.documentRepository.findOne({ id, userId });
-
-    if (document != null && includeContent) {
-      await this.getDocumentContent(document);
-    }
+  async getDocument(filters?: DocumentFilters): Promise<Document | null> {
+    const document = await this.documentRepository.findOne(filters);
 
     return document;
+  }
+
+  async getChatAndProjectDocuments(
+    chatId: string,
+    projectId?: string | null
+  ): Promise<Document[]> {
+    const documents = await this.documentRepository.getChatAndProjectDocuments(
+      chatId,
+      projectId
+    );
+
+    return documents;
+  }
+
+  async getRelevantDocumentChunks(
+    query: string,
+    threshold: number,
+    filters?: DocumentChunkFilters
+  ): Promise<DocumentChunk[]> {
+    const documentChunks = await this.documentChunkRepository.findRelevant(
+      query,
+      threshold,
+      filters
+    );
+
+    return documentChunks;
   }
 
   async createDocument(
-    file: Express.Multer.File,
-    userId: string,
-    chatId?: string | null,
-    projectId?: string | null
-  ): Promise<Document> {
-    const document: Document = {
-      id: randomUUID(),
-      name: file.originalname,
-      path: `${config.UPLOADS_PATH}/${file.originalname}`,
-      mimetype: file.mimetype,
-      size: file.size,
-      chatId,
-      projectId,
-      userId,
-    };
+    document: Document,
+    file: Express.Multer.File
+  ): Promise<void> {
+    await FileSystemUtils.ensureDirectoryExists(
+      path.join(config.UPLOADS_PATH, document.userId)
+    );
 
-    await fs.writeFile(document.path, file.buffer);
+    const documentPath = path.join(
+      config.UPLOADS_PATH,
+      document.userId,
+      `${document.id}_${file.originalname}`
+    );
+
+    await FileSystemUtils.writeFile(documentPath, file.buffer);
+
+    document.path = documentPath;
 
     await this.documentRepository.create(document);
-
-    return document;
   }
 
-  async processDocument(document: Document): Promise<string> {
-    await this.getDocumentContent(document);
+  async processDocument(id: string): Promise<void> {
+    const document = await this.documentRepository.findOne({ id });
 
-    const documentChunks = await this.chunkDocument(document);
-
-    await this.generateEmbeddings(documentChunks);
-
-    await this.documentChunkRepository.createAll(documentChunks);
-
-    return document.id;
-  }
-
-  async updateDocument(document: Document): Promise<string> {
-    await this.documentRepository.update(document.id, document);
-
-    return document.id;
-  }
-
-  async deleteDocument(document: Document): Promise<string> {
-    await fs.rm(document.path);
-
-    await this.documentRepository.delete(document.id);
-
-    return document.id;
-  }
-
-  private async getDocumentsContent(documents: Document[]) {
-    await Promise.all(
-      documents.map((document) => this.getDocumentContent(document))
-    );
-  }
-
-  private async getDocumentContent(document: Document) {
-    const buffer = await fs.readFile(document.path);
-
-    const pdf = await parsePdf(buffer);
-
-    document.content = pdf.text;
-  }
-
-  private async generateEmbeddings(documentChunks: DocumentChunk[]) {
-    await Promise.all(
-      documentChunks.map(async (documentChunk) => {
-        documentChunk.embedding = await this.assistantService.generateEmbedding(
-          documentChunk.content
-        );
-      })
-    );
-  }
-
-  private async chunkDocument(document: Document) {
-    if (document.content == null) {
-      return [];
+    if (document == null) {
+      throw new Error("Document not found.");
     }
 
+    const content = await FileSystemUtils.readFile(document.path);
+
+    let textContent = "";
+
+    switch (document.mimetype) {
+      case "text/plain": {
+        textContent = content.toString("utf-8");
+
+        break;
+      }
+      case "application/pdf": {
+        const pdf = await parsePdf(content);
+
+        textContent = pdf.text;
+
+        break;
+      }
+    }
+
+    const documentChunks = await this.chunkDocumentContent(
+      document.id,
+      textContent
+    );
+
+    const generateEmbeddingPromises = documentChunks.map(
+      async (documentChunk) => {
+        const embedding = await this.assistantService.generateEmbedding(
+          documentChunk.content
+        );
+
+        documentChunk.embedding = embedding;
+      }
+    );
+
+    await Promise.all(generateEmbeddingPromises);
+
+    await this.documentChunkRepository.createAll(documentChunks);
+  }
+
+  async updateDocument(
+    id: string,
+    document: NullablePartial<Document>
+  ): Promise<void> {
+    await this.documentRepository.update(id, document);
+  }
+
+  async deleteDocument(id: string): Promise<void> {
+    await this.documentRepository.delete(id);
+  }
+
+  private async chunkDocumentContent(documentId: string, content: string) {
     const chunkSize = 500;
     const overlap = 50;
 
-    const words = document.content.split(/\s+/).filter(Boolean);
+    const words = content.split(/\s+/).filter(Boolean);
 
     const documentChunks: DocumentChunk[] = [];
 
@@ -187,7 +190,7 @@ export class DocumentManager implements IDocumentManager {
         index: documentChunks.length,
         content: words.slice(index, end).join(" "),
         embedding: [],
-        documentId: document.id,
+        documentId,
       };
 
       documentChunks.push(documentChunk);

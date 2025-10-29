@@ -17,7 +17,7 @@ type ProjectQueryRow = {
   documentName?: string;
   documentPath?: string;
   documentMimetype?: string;
-  documentSize?: number;
+  documentSizeInBytes?: number;
   documentchatId?: string | null;
   documentProjectId?: string | null;
   documentUserId?: string;
@@ -82,7 +82,7 @@ export class ProjectRepository implements IProjectRepository {
               document.name AS "documentName",
               document.path AS "documentPath",
               document.mimetype AS "documentMimetype",
-              document.size AS "documentSize",
+              document.size_in_bytes AS "documentSizeInBytes",
               document.chat_id AS "documentchatId",
               document.project_id AS "documentProjectId",
               document.user_id AS "documentUserId",
@@ -153,7 +153,7 @@ export class ProjectRepository implements IProjectRepository {
               document.name AS "documentName",
               document.path AS "documentPath",
               document.mimetype AS "documentMimetype",
-              document.size AS "documentSize",
+              document.size_in_bytes AS "documentSizeInBytes",
               document.chat_id AS "documentchatId",
               document.project_id AS "documentProjectId",
               document.user_id AS "documentUserId",
@@ -241,7 +241,7 @@ export class ProjectRepository implements IProjectRepository {
       name: row.documentName ?? "",
       path: row.documentPath ?? "",
       mimetype: row.documentMimetype ?? "",
-      size: row.documentSize ?? 0,
+      sizeInBytes: row.documentSizeInBytes ?? 0,
       chatId: row.documentchatId,
       projectId: row.documentProjectId,
       userId: row.documentUserId ?? "",

@@ -2,6 +2,7 @@ import { MessageFeedback, UserContentBlock } from "../entities/message";
 
 export type GetChatsQuery = {
   search?: string;
+  projectId?: string;
   cursor?: string;
   limit?: string;
 };

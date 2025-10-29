@@ -1,5 +1,6 @@
 import z from "zod";
 import { IDataContext } from "../data/context";
+import { Document } from "../models/entities/document";
 import {
   DeleteDocumentParams,
   UploadDocumentRequest,
@@ -42,7 +43,7 @@ export class DocumentService implements IDocumentService {
     validateRequest(
       request,
       z.object({
-        chatId: z.string().optional(),
+        id: z.string(),
         projectId: z.string().optional(),
       })
     );
@@ -54,15 +55,21 @@ export class DocumentService implements IDocumentService {
     try {
       await this.dataContext.begin();
 
-      const document = await this.documentManager.createDocument(
-        file,
-        authContext.user.id,
-        null,
-        request.projectId
-      );
+      const document: Document = {
+        id: request.id,
+        name: file.originalname,
+        path: "",
+        mimetype: file.mimetype,
+        sizeInBytes: file.size,
+        chatId: null,
+        projectId: request.projectId,
+        userId: authContext.user.id,
+      };
+
+      await this.documentManager.createDocument(document, file);
 
       if (request.projectId != null) {
-        await this.documentManager.processDocument(document);
+        await this.documentManager.processDocument(document.id);
       }
 
       await this.dataContext.commit();
@@ -79,16 +86,16 @@ export class DocumentService implements IDocumentService {
     params: DeleteDocumentParams,
     authContext: AuthContext
   ): Promise<DeleteDocumentResponse> {
-    const document = await this.documentManager.getDocument(
-      params.documentId,
-      authContext.user.id
-    );
+    const documentExists = await this.documentManager.documentExists({
+      id: params.documentId,
+      userId: authContext.user.id,
+    });
 
-    if (document == null) {
+    if (!documentExists) {
       throw ApplicationError.notFound();
     }
 
-    await this.documentManager.deleteDocument(document);
+    await this.documentManager.deleteDocument(params.documentId);
 
     return params.documentId;
   }

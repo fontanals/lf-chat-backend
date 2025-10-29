@@ -13,6 +13,11 @@ import {
   ToolCallStartPart,
 } from "../entities/message";
 
+export type ProcessDocumentEvent = ServerSentEvent<
+  "process-document",
+  { success: true; id: string } | { success: false; id: string; error: string }
+>;
+
 export type TextStartEvent = ServerSentEvent<"text-start", TextStartPart>;
 
 export type TextDeltaEvent = ServerSentEvent<"text-delta", TextDeltaPart>;
@@ -47,6 +52,7 @@ export type MessageStartEvent = ServerSentEvent<
 export type MessageEndEvent = ServerSentEvent<"message-end", MessageEndPart>;
 
 export type SendMessageEvent =
+  | ProcessDocumentEvent
   | TextStartEvent
   | TextDeltaEvent
   | TextEndEvent

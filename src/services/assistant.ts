@@ -5,6 +5,7 @@ import {
   MessagePart,
   SearchDocumentsToolInput,
   SearchDocumentsToolOutput,
+  TextContentBlock,
   UserMessage,
 } from "../models/entities/message";
 import { PromiseUtils } from "../utils/promises";
@@ -112,18 +113,23 @@ const mockChats = [
   },
 ];
 
+type SendMessageOptions = {
+  userCustomPrompt?: string | null;
+  previousMessages: Message[];
+  message: UserMessage;
+  documents: string[];
+  onMessagePart: (messagePart: MessagePart) => void;
+  onSearchDocuments: (
+    input: SearchDocumentsToolInput
+  ) => Promise<SearchDocumentsToolOutput>;
+  abortSignal: AbortSignal;
+};
+
 export interface IAssistantService {
   generateEmbedding(text: string): Promise<number[]>;
   generateChatTitle(messages: Message[]): Promise<string>;
   validateMessage(message: Message): Promise<boolean>;
-  sendMessage(
-    previousMessages: Message[],
-    message: UserMessage,
-    onMessagePart: (messagePart: MessagePart) => void,
-    onSearchDocuments?: (
-      input: SearchDocumentsToolInput
-    ) => Promise<SearchDocumentsToolOutput>
-  ): Promise<AssistantMessage>;
+  sendMessage(options: SendMessageOptions): Promise<AssistantMessage>;
 }
 
 export class AssistantService implements IAssistantService {
@@ -153,38 +159,80 @@ export class AssistantService implements IAssistantService {
     return true;
   }
 
-  async sendMessage(
-    previousMessages: Message[],
-    message: UserMessage,
-    onMessagePart: (messagePart: MessagePart) => void,
-    onSearchDocuments?: (
-      input: SearchDocumentsToolInput
-    ) => Promise<SearchDocumentsToolOutput>
-  ): Promise<AssistantMessage> {
+  async sendMessage(options: SendMessageOptions): Promise<AssistantMessage> {
     const response: AssistantMessage = {
       id: randomUUID(),
       role: "assistant",
       content: [],
       feedback: null,
       finishReason: "stop",
-      parentMessageId: message.id,
-      chatId: message.chatId,
+      parentMessageId: options.message.id,
+      chatId: options.message.chatId,
     };
 
     const mockChat = mockChats[Math.floor(Math.random() * mockChats.length)];
 
-    onMessagePart({ type: "message-start", messageId: response.id });
+    options.onMessagePart({ type: "message-start", messageId: response.id });
 
     await PromiseUtils.sleep(50);
 
-    onMessagePart({ type: "text-start", messageId: response.id });
+    if (options.abortSignal.aborted) {
+      options.onMessagePart({
+        type: "message-end",
+        messageId: response.id,
+        finishReason: "interrupted",
+      });
+
+      response.finishReason = "interrupted";
+
+      return response;
+    }
+
+    const textContentBlock: TextContentBlock = { type: "text", text: "" };
+
+    response.content.push(textContentBlock);
+
+    options.onMessagePart({ type: "text-start", messageId: response.id });
 
     await PromiseUtils.sleep(50);
+
+    if (options.abortSignal.aborted) {
+      options.onMessagePart({ type: "text-end", messageId: response.id });
+
+      options.onMessagePart({
+        type: "message-end",
+        messageId: response.id,
+        finishReason: "interrupted",
+      });
+
+      response.finishReason = "interrupted";
+
+      return response;
+    }
 
     const textParts = mockChat.message.split(" ");
 
     for (let index = 0; index < textParts.length; index++) {
-      onMessagePart({
+      textContentBlock.text +=
+        index < textParts.length - 1
+          ? textParts[index] + " "
+          : textParts[index];
+
+      if (options.abortSignal.aborted) {
+        options.onMessagePart({ type: "text-end", messageId: response.id });
+
+        options.onMessagePart({
+          type: "message-end",
+          messageId: response.id,
+          finishReason: "interrupted",
+        });
+
+        response.finishReason = "interrupted";
+
+        return response;
+      }
+
+      options.onMessagePart({
         type: "text-delta",
         messageId: response.id,
         delta:
@@ -196,13 +244,23 @@ export class AssistantService implements IAssistantService {
       await PromiseUtils.sleep(50);
     }
 
-    onMessagePart({ type: "text-end", messageId: response.id });
-
-    response.content.push({ type: "text", text: mockChat.message });
+    options.onMessagePart({ type: "text-end", messageId: response.id });
 
     await PromiseUtils.sleep(50);
 
-    onMessagePart({
+    if (options.abortSignal.aborted) {
+      options.onMessagePart({
+        type: "message-end",
+        messageId: response.id,
+        finishReason: "interrupted",
+      });
+
+      response.finishReason = "interrupted";
+
+      return response;
+    }
+
+    options.onMessagePart({
       type: "message-end",
       messageId: response.id,
       finishReason: "stop",

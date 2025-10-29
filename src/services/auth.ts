@@ -20,7 +20,10 @@ import { IUserRepository } from "../repositories/user";
 import { ApplicationError } from "../utils/errors";
 import { validateRequest } from "../utils/express";
 
-export type AuthContext = { session: Session; user: UserDto };
+export type AuthContext = {
+  session: Session;
+  user: { id: string; name: string; email: string };
+};
 
 declare global {
   namespace Express {
@@ -112,9 +115,14 @@ export class AuthService implements IAuthService {
       userId: user.id,
     };
 
-    const userDto = mapUserToDto(user);
-
-    const authContext: AuthContext = { session, user: userDto };
+    const authContext: AuthContext = {
+      session,
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+      },
+    };
 
     const accessToken = this.generateAccessToken(authContext);
     const refreshToken = this.generateRefreshToken(authContext);
@@ -138,13 +146,16 @@ export class AuthService implements IAuthService {
 
       await this.dataContext.commit();
 
-      return {
+      const response: WithTokens<SignupResponse> = {
         accessToken,
         refreshToken,
-        response: { session, user: userDto },
+        response: { session, user: mapUserToDto(user) },
       };
+
+      return response;
     } catch (error) {
       await this.dataContext.rollback();
+
       throw error;
     }
   }
@@ -176,9 +187,14 @@ export class AuthService implements IAuthService {
       userId: user.id,
     };
 
-    const userDto = mapUserToDto(user);
-
-    const authContext: AuthContext = { session, user };
+    const authContext: AuthContext = {
+      session,
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+      },
+    };
 
     const accessToken = this.generateAccessToken(authContext);
     const refreshToken = this.generateRefreshToken(authContext);
@@ -200,13 +216,16 @@ export class AuthService implements IAuthService {
 
       await this.dataContext.commit();
 
-      return {
+      const response: WithTokens<SigninReponse> = {
         accessToken,
         refreshToken,
-        response: { session, user: userDto },
+        response: { session, user: mapUserToDto(user) },
       };
+
+      return response;
     } catch (error) {
       await this.dataContext.rollback();
+
       throw error;
     }
   }

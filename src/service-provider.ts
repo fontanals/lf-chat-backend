@@ -232,6 +232,7 @@ export function registerServices(services: ServiceContainer, pool: Pool) {
     factory: (services) =>
       new ChatService(
         services.get("DataContext"),
+        services.get("UserRepository"),
         services.get("ChatRepository"),
         services.get("MessageRepository"),
         services.get("AssistantService"),

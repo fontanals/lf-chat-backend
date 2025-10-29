@@ -56,10 +56,15 @@ export function createChatRoutes(serviceContainer: ServiceContainer) {
     "/",
     sseRequestHandler(
       serviceContainer,
-      async (req, res, services, onSendEvent) => {
+      async (req, res, services, onSendEvent, abortSignal) => {
         const chatService = services.get("ChatService");
 
-        await chatService.createChat(req.body, req.authContext, onSendEvent);
+        await chatService.createChat(
+          req.body,
+          req.authContext,
+          onSendEvent,
+          abortSignal
+        );
       }
     )
   );
@@ -68,14 +73,15 @@ export function createChatRoutes(serviceContainer: ServiceContainer) {
     "/:chatId/messages",
     sseRequestHandler(
       serviceContainer,
-      async (req, res, services, onSendEvent) => {
+      async (req, res, services, onSendEvent, abortSignal) => {
         const chatService = services.get("ChatService");
 
         await chatService.sendMessage(
           req.params as SendMessageParams,
           req.body,
           req.authContext,
-          onSendEvent
+          onSendEvent,
+          abortSignal
         );
       }
     )

@@ -7,7 +7,7 @@
     "test:unit": "jest tests/unit",
     "test:integration": "jest tests/integration --runInBand",
     "build": "tsc",
-    "start": "nodemon src/index.ts"
+    "start": "tsx --watch src/index.ts"
   },
   "keywords": [],
   "author": "",
@@ -26,10 +26,9 @@
     "@types/pg": "^8.15.4",
     "@types/supertest": "^6.0.3",
     "jest": "^30.0.4",
-    "nodemon": "^3.1.10",
     "supertest": "^7.1.4",
     "ts-jest": "^29.4.0",
-    "ts-node": "^10.9.2",
+    "tsx": "^4.20.6",
     "typescript": "^5.8.3"
   },
   "dependencies": {

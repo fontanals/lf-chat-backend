@@ -8,8 +8,8 @@ export const upload = multer({
   storage,
   limits: { fileSize: FIVE_MB },
   fileFilter: (req, file, callback) => {
-    const allowedExtensions = [".pdf"];
-    const allowedMimetypes = ["application/pdf"];
+    const allowedExtensions = [".txt", ".pdf"];
+    const allowedMimetypes = ["text/plain", "application/pdf"];
 
     const extension = file.originalname
       .substring(file.originalname.lastIndexOf("."))

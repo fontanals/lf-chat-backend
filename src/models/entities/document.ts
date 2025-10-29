@@ -3,11 +3,10 @@ export type Document = {
   name: string;
   path: string;
   mimetype: string;
-  size: number;
+  sizeInBytes: number;
   chatId?: string | null;
   projectId?: string | null;
   userId: string;
   createdAt?: Date;
   udpatedAt?: Date;
-  content?: string;
 };

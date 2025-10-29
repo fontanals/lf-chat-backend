@@ -99,33 +99,46 @@ export function sseRequestHandler(
     req: Request,
     res: Response,
     services: IServiceProvider,
-    onSendEvent: (event: ServerSentEvent) => void
+    onSendEvent: (event: ServerSentEvent) => void,
+    abortSignal: AbortSignal
   ) => Promise<void>
 ): RequestHandler {
   return async (req, res, next) => {
     let hasStartedStreaming = false;
 
+    const abortController = new AbortController();
+
+    res.on("close", () => abortController.abort());
+
     try {
       const scope = serviceContainer.createScope();
 
-      await handler(req, res, scope, (event) => {
-        if (event.event === "start") {
-          res.header("Content-Type", "text/event-stream; charset=utf-8");
-          res.header("Cache-Control", "no-cache");
-          res.header("Connection", "keep-alive");
-          res.header("Access-Control-Expose-Headers", "Authorization");
+      await handler(
+        req,
+        res,
+        scope,
+        (event) => {
+          if (event.event === "start") {
+            res.header("Content-Type", "text/event-stream; charset=utf-8");
+            res.header("Cache-Control", "no-cache");
+            res.header("Connection", "keep-alive");
+            res.header("Access-Control-Expose-Headers", "Authorization");
 
-          hasStartedStreaming = true;
-        }
+            hasStartedStreaming = true;
+          }
 
-        res.write(`data: ${JSON.stringify(event)}\n\n`);
-      });
+          res.write(`data: ${JSON.stringify(event)}\n\n`);
+        },
+        abortController.signal
+      );
 
       res.end();
     } catch (error) {
       if (!hasStartedStreaming) {
         return next(error);
       }
+
+      console.log("ERROR: ", error);
 
       const appliationError =
         error instanceof ApplicationError

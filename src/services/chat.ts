@@ -1,10 +1,12 @@
 import z from "zod";
 import { IDataContext } from "../data/context";
 import { Chat } from "../models/entities/chat";
+import { Document } from "../models/entities/document";
 import {
   Message,
   SearchDocumentsToolInput,
   SearchDocumentsToolOutput,
+  UserMessage,
 } from "../models/entities/message";
 import {
   CreateChatRequest,
@@ -30,6 +32,7 @@ import {
 } from "../models/responses/chat";
 import { IChatRepository } from "../repositories/chat";
 import { IMessageRepository } from "../repositories/message";
+import { IUserRepository } from "../repositories/user";
 import { ApplicationError } from "../utils/errors";
 import {
   getQueryDate,
@@ -57,13 +60,15 @@ export interface IChatService {
   createChat(
     request: CreateChatRequest,
     authContext: AuthContext,
-    onSendEvent: (event: SendMessageEvent) => void
+    onSendEvent: (event: SendMessageEvent) => void,
+    abortSignal: AbortSignal
   ): Promise<void>;
   sendMessage(
     params: SendMessageParams,
     request: SendMessageRequest,
     authContext: AuthContext,
-    onSendEvent: (event: SendMessageEvent) => void
+    onSendEvent: (event: SendMessageEvent) => void,
+    abortSignal: AbortSignal
   ): Promise<void>;
   updateChat(
     params: UpdateChatParams,
@@ -83,6 +88,7 @@ export interface IChatService {
 
 export class ChatService implements IChatService {
   private readonly dataContext: IDataContext;
+  private readonly userRepository: IUserRepository;
   private readonly chatRepository: IChatRepository;
   private readonly messageRepository: IMessageRepository;
   private readonly assistantService: IAssistantService;
@@ -90,12 +96,14 @@ export class ChatService implements IChatService {
 
   constructor(
     dataContext: IDataContext,
+    userRepository: IUserRepository,
     chatRepository: IChatRepository,
     messageRepository: IMessageRepository,
     assistantService: IAssistantService,
     documentManager: IDocumentManager
   ) {
     this.dataContext = dataContext;
+    this.userRepository = userRepository;
     this.chatRepository = chatRepository;
     this.messageRepository = messageRepository;
     this.assistantService = assistantService;
@@ -107,13 +115,14 @@ export class ChatService implements IChatService {
     authContext: AuthContext
   ): Promise<GetChatsResponse> {
     const search = getQueryString(query.search);
+    const projectId = getQueryString(query.projectId);
     const cursor = getQueryDate(query.cursor, new Date());
     const limit = getQueryNumber(query.limit, 20);
 
     const paginatedChats = await this.chatRepository.findAllPaginated(
       cursor,
       limit,
-      { title: search, userId: authContext.user.id }
+      { title: search, projectId, userId: authContext.user.id }
     );
 
     return {
@@ -191,7 +200,8 @@ export class ChatService implements IChatService {
   async createChat(
     request: CreateChatRequest,
     authContext: AuthContext,
-    onSendEvent: (event: SendMessageEvent) => void
+    onSendEvent: (event: SendMessageEvent) => void,
+    abortSignal: AbortSignal
   ): Promise<void> {
     validateRequest(
       request,
@@ -235,6 +245,18 @@ export class ChatService implements IChatService {
       throw ApplicationError.userMessageViolatesContentPolicy();
     }
 
+    const user = await this.userRepository.findOne({ id: authContext.user.id });
+
+    let documentNames: string[] = [];
+
+    if (request.projectId != null) {
+      const projectDocuments = await this.documentManager.getDocuments({
+        projectId: request.projectId,
+      });
+
+      documentNames = projectDocuments.map((document) => document.name);
+    }
+
     try {
       await this.dataContext.begin();
 
@@ -245,21 +267,37 @@ export class ChatService implements IChatService {
       await this.dataContext.commit();
     } catch (error) {
       await this.dataContext.rollback();
+
       throw error;
     }
 
     onSendEvent({ event: "start" });
 
-    const assistantMessage = await this.assistantService.sendMessage(
-      [],
-      userMessage,
-      (messagePart) =>
+    const { success, documents: userMessageDocuments } =
+      await this.processUserMessageDocuments(userMessage, onSendEvent);
+
+    if (!success) {
+      return onSendEvent({ event: "end" });
+    }
+
+    documentNames.push(
+      ...userMessageDocuments.map((document) => document.name)
+    );
+
+    const assistantMessage = await this.assistantService.sendMessage({
+      userCustomPrompt: user?.customPrompt,
+      previousMessages: [],
+      message: userMessage,
+      documents: documentNames,
+      onMessagePart: (messagePart) =>
         onSendEvent({
           event: messagePart.type,
           data: messagePart,
         } as SendMessageEvent),
-      (input) => this.searchDocuments(input, chat.projectId!)
-    );
+      onSearchDocuments: (input) =>
+        this.searchDocuments(input, chat.projectId!),
+      abortSignal,
+    });
 
     await this.messageRepository.create(assistantMessage);
 
@@ -279,7 +317,8 @@ export class ChatService implements IChatService {
     params: SendMessageParams,
     request: SendMessageRequest,
     authContext: AuthContext,
-    onSendEvent: (event: SendMessageEvent) => void
+    onSendEvent: (event: SendMessageEvent) => void,
+    abortSignal: AbortSignal
   ): Promise<void> {
     validateRequest(
       request,
@@ -325,24 +364,48 @@ export class ChatService implements IChatService {
       throw ApplicationError.userMessageViolatesContentPolicy();
     }
 
+    const user = await this.userRepository.findOne({ id: authContext.user.id });
+
     const previousMessages = await this.messageRepository.findAll({
       chatId: params.chatId,
     });
+
+    const documents = await this.documentManager.getChatAndProjectDocuments(
+      chat.id,
+      chat.projectId
+    );
+
+    const documentNames = documents.map((document) => document.name);
 
     await this.messageRepository.create(userMessage);
 
     onSendEvent({ event: "start" });
 
-    const assistantMessage = await this.assistantService.sendMessage(
+    const { success, documents: userMessageDocuments } =
+      await this.processUserMessageDocuments(userMessage, onSendEvent);
+
+    if (!success) {
+      return onSendEvent({ event: "end" });
+    }
+
+    documentNames.push(
+      ...userMessageDocuments.map((document) => document.name)
+    );
+
+    const assistantMessage = await this.assistantService.sendMessage({
+      userCustomPrompt: user?.customPrompt,
       previousMessages,
-      userMessage,
-      (messagePart) =>
+      message: userMessage,
+      documents: documentNames,
+      onMessagePart: (messagePart) =>
         onSendEvent({
           event: messagePart.type,
           data: messagePart,
         } as SendMessageEvent),
-      (input) => this.searchDocuments(input, chat.projectId!)
-    );
+      onSearchDocuments: (input) =>
+        this.searchDocuments(input, chat.projectId!),
+      abortSignal,
+    });
 
     await this.messageRepository.create(assistantMessage);
 
@@ -397,7 +460,6 @@ export class ChatService implements IChatService {
     });
 
     if (!chatExists) {
-      console.log("CHAT NOT FOUND");
       throw ApplicationError.notFound();
     }
 
@@ -407,7 +469,6 @@ export class ChatService implements IChatService {
     });
 
     if (!messageExists) {
-      console.log("MESSAGE NOT FOUND");
       throw ApplicationError.notFound();
     }
 
@@ -436,6 +497,77 @@ export class ChatService implements IChatService {
     return params.chatId;
   }
 
+  async processUserMessageDocuments(
+    userMessage: UserMessage,
+    onSendEvent: (event: SendMessageEvent) => void
+  ): Promise<{ success: boolean; documents: Document[] }> {
+    const result = { success: true, documents: [] as Document[] };
+
+    const processDocumentPromises: Promise<
+      { success: true; document: Document } | { success: false }
+    >[] = [];
+
+    for (const contentBlock of userMessage.content) {
+      if (contentBlock.type === "document") {
+        processDocumentPromises.push(
+          this.processDocument(contentBlock.id, userMessage.chatId, onSendEvent)
+        );
+      }
+    }
+
+    const processDocumentResults = await Promise.all(processDocumentPromises);
+
+    processDocumentResults.forEach((processDocumentResult) => {
+      if (processDocumentResult.success) {
+        result.documents.push(processDocumentResult.document);
+      } else {
+        result.success = false;
+      }
+    });
+
+    return result;
+  }
+
+  async processDocument(
+    documentId: string,
+    chatId: string,
+    onSendEvent: (event: SendMessageEvent) => void
+  ): Promise<{ success: true; document: Document } | { success: false }> {
+    try {
+      const document = await this.documentManager.getDocument({
+        id: documentId,
+      });
+
+      if (document == null) {
+        throw new Error("Document not found.");
+      }
+
+      if (document.chatId == null && document.projectId == null) {
+        await this.documentManager.processDocument(documentId);
+
+        await this.documentManager.updateDocument(documentId, { chatId });
+      }
+
+      onSendEvent({
+        event: "process-document",
+        data: { success: true, id: document.id },
+      });
+
+      return { success: true, document: document };
+    } catch (error) {
+      onSendEvent({
+        event: "process-document",
+        data: {
+          success: false,
+          id: documentId,
+          error: (error as Error).message,
+        },
+      });
+
+      return { success: false };
+    }
+  }
+
   async searchDocuments(
     input: SearchDocumentsToolInput,
     chatId?: string,
@@ -449,12 +581,11 @@ export class ChatService implements IChatService {
 
     try {
       const documentChunks =
-        await this.documentManager.searchRelevantDocumentChunks(
-          input.query,
+        await this.documentManager.getRelevantDocumentChunks(input.query, 0.5, {
           chatId,
           projectId,
-          true
-        );
+          includeDocument: true,
+        });
 
       const data = documentChunks
         .map(

@@ -1,3 +1,5 @@
+CREATE EXTENSION IF NOT EXISTS vector;
+
 CREATE FUNCTION set_updated_at() RETURNS TRIGGER AS $$
 BEGIN
     NEW.updated_at = CURRENT_TIMESTAMP;
@@ -74,7 +76,7 @@ EXECUTE FUNCTION set_updated_at();
 
 CREATE TYPE "message_role" AS ENUM ('user', 'assistant');
 CREATE TYPE "message_feedback" AS ENUM ('like', 'dislike', 'neutral');
-CREATE TYPE "message_finish_reason" AS ENUM ('stop', 'length', 'content-filter', 'tool-calls', 'other', 'unknown');
+CREATE TYPE "message_finish_reason" AS ENUM ('stop', 'length', 'content-filter', 'tool-calls', 'error', 'other', 'unknown', 'interrupted');
 
 CREATE TABLE "message" (
     "id" uuid PRIMARY KEY,
@@ -98,7 +100,7 @@ CREATE TABLE "document" (
     "name" text NOT NULL,
     "path" text NOT NULL UNIQUE,
     "mimetype" text NOT NULL,
-    "size" integer NOT NULL,
+    "size_in_bytes" integer NOT NULL,
     "created_at" timestamp with time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updated_at" timestamp with time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "chat_id" uuid REFERENCES "chat"("id") ON DELETE CASCADE,

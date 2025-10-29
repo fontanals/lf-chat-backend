@@ -162,7 +162,7 @@ export class DocumentChunkRepository implements IDocumentChunkRepository {
       name: row.documentName!,
       path: row.documentPath!,
       mimetype: row.documentMimetype!,
-      size: row.documentSize!,
+      sizeInBytes: row.documentSize!,
       chatId: row.documentMessageId ?? null,
       projectId: row.documentProjectId ?? null,
       userId: row.documentUserId!,

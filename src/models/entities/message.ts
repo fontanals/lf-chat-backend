@@ -15,7 +15,8 @@ export type MessageFinishReason =
   | "tool-calls"
   | "error"
   | "other"
-  | "unknown";
+  | "unknown"
+  | "interrupted";
 
 export type TextStartPart = { type: "text-start"; messageId: string };
 
@@ -72,7 +73,8 @@ export type MessageEndPart =
         | "content-filter"
         | "tool-calls"
         | "other"
-        | "unknown";
+        | "unknown"
+        | "interrupted";
     }
   | {
       type: "messageEnd";
