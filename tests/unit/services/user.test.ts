@@ -1,5 +1,5 @@
 import { randomUUID } from "crypto";
-import { IDataContext } from "../../../src/data/context";
+import { IDataContext } from "../../../src/data/data-context";
 import { Session } from "../../../src/models/entities/session";
 import { mapUserToDto, User } from "../../../src/models/entities/user";
 import { IUserRepository } from "../../../src/repositories/user";

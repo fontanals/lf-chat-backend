@@ -1,4 +1,4 @@
-import { IDataContext } from "../data/context";
+import { IDataContext } from "../data/data-context";
 import { RefreshToken } from "../models/entities/refresh-token";
 import { ArrayUtils } from "../utils/arrays";
 import { NullablePartial } from "../utils/types";

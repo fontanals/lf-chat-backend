@@ -1,3 +1,4 @@
+import { AssistantMode } from "../../services/assistant";
 import { CursorPagination, ServerSentEvent } from "../../utils/types";
 import { Chat } from "../entities/chat";
 import {
@@ -9,14 +10,10 @@ import {
   TextStartPart,
   ToolCallDeltaPart,
   ToolCallEndPart,
+  ToolCallPart,
   ToolCallResultPart,
   ToolCallStartPart,
 } from "../entities/message";
-
-export type ProcessDocumentEvent = ServerSentEvent<
-  "process-document",
-  { success: true; id: string } | { success: false; id: string; error: string }
->;
 
 export type TextStartEvent = ServerSentEvent<"text-start", TextStartPart>;
 
@@ -33,6 +30,8 @@ export type ToolCallDeltaEvent = ServerSentEvent<
   "tool-call-delta",
   ToolCallDeltaPart
 >;
+
+export type ToolCallEvent = ServerSentEvent<"tool-call", ToolCallPart>;
 
 export type ToolCallResultEvent = ServerSentEvent<
   "tool-call-result",
@@ -52,16 +51,18 @@ export type MessageStartEvent = ServerSentEvent<
 export type MessageEndEvent = ServerSentEvent<"message-end", MessageEndPart>;
 
 export type SendMessageEvent =
-  | ProcessDocumentEvent
   | TextStartEvent
   | TextDeltaEvent
   | TextEndEvent
   | ToolCallStartEvent
   | ToolCallDeltaEvent
+  | ToolCallEvent
   | ToolCallResultEvent
   | ToolCallEndEvent
   | MessageStartEvent
   | MessageEndEvent;
+
+export type GetAssistantModeResponse = AssistantMode;
 
 export type GetChatsResponse = CursorPagination<Chat, string>;
 

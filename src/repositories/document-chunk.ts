@@ -1,4 +1,4 @@
-import { IDataContext } from "../data/context";
+import { IDataContext } from "../data/data-context";
 import { Document } from "../models/entities/document";
 import { DocumentChunk } from "../models/entities/document-chunk";
 import { ArrayUtils } from "../utils/arrays";
@@ -12,11 +12,12 @@ type DocumentChunkQueryRow = {
   documentChunkDocumentId: string;
   documentChunkCreatedAt?: Date;
   documentId?: string;
+  documentKey?: string;
   documentName?: string;
-  documentPath?: string;
   documentMimetype?: string;
-  documentSize?: number;
-  documentMessageId?: string | null;
+  documentSizeInBytes?: number;
+  documentIsProcessed?: boolean;
+  documentChatId?: string | null;
   documentProjectId?: string | null;
   documentUserId?: string;
   documentCreatedAt?: Date;
@@ -27,15 +28,14 @@ export type DocumentChunkFilters = NullablePartial<
   DocumentChunk & {
     chatId: string;
     projectId: string;
-    limit: number;
     includeDocument: boolean;
   }
 >;
 
 export interface IDocumentChunkRepository {
   findRelevant(
-    query: string,
-    threshold: number,
+    embedding: number[],
+    limit: number,
     filters?: DocumentChunkFilters
   ): Promise<DocumentChunk[]>;
   createAll(documentChunks: DocumentChunk[]): Promise<void>;
@@ -49,27 +49,28 @@ export class DocumentChunkRepository implements IDocumentChunkRepository {
   }
 
   async findRelevant(
-    query: string,
-    threshold: number,
+    embedding: number[],
+    limit: number,
     filters?: DocumentChunkFilters
   ): Promise<DocumentChunk[]> {
     let paramsCount = 0;
 
     const result = await this.dataContext.query<DocumentChunkQueryRow>(
       `SELECT
-        document_chunk.id,
-        document_chunk.index,
-        document_chunk.content,
-        document_chunk.document_id AS "documentId",
-        document_chunk.created_at AS "createdAt",
+        document_chunk.id AS "documentChunkId",
+        document_chunk.index AS "documentChunkIndex",
+        document_chunk.content AS "documentChunkContent",
+        document_chunk.document_id AS "documentChunkDocumentId",
+        document_chunk.created_at AS "documentChunkCreatedAt",
         ${
           filters?.includeDocument
             ? `document.id AS "documentId",
+              document.key AS "documentKey",
               document.name AS "documentName",
-              document.path AS "documentPath",
               document.mimetype AS "documentMimetype",
-              document.size AS "documentSize",
-              document.message_id AS "documentMessageId",
+              document.size_in_bytes AS "documentSizeInBytes",
+              document.is_processed AS "documentIsProcessed",
+              document.chat_id AS "documentChatId",
               document.project_id AS "documentProjectId",
               document.user_id AS "documentUserId",
               document.created_at AS "documentCreatedAt",
@@ -99,16 +100,15 @@ export class DocumentChunkRepository implements IDocumentChunkRepository {
             ? `document.project_id = $${++paramsCount} AND`
             : ""
         }
-        document_chunk.embedding <-> $${++paramsCount} > $${++paramsCount}
+        TRUE
       ORDER BY distance
-      ${filters?.limit != null ? `LIMIT $${++paramsCount}` : ""};`,
+      LIMIT $${++paramsCount};`,
       [
+        JSON.stringify(embedding),
         filters?.documentId,
         filters?.chatId,
         filters?.projectId,
-        query,
-        threshold,
-        filters?.limit,
+        limit,
       ].filter((param) => param != null)
     );
 
@@ -159,12 +159,13 @@ export class DocumentChunkRepository implements IDocumentChunkRepository {
   mapRowToDocument(row: DocumentChunkQueryRow): Document {
     return {
       id: row.documentId!,
+      key: row.documentKey!,
       name: row.documentName!,
-      path: row.documentPath!,
       mimetype: row.documentMimetype!,
-      sizeInBytes: row.documentSize!,
-      chatId: row.documentMessageId ?? null,
-      projectId: row.documentProjectId ?? null,
+      sizeInBytes: row.documentSizeInBytes!,
+      isProcessed: row.documentIsProcessed!,
+      chatId: row.documentChatId,
+      projectId: row.documentProjectId,
       userId: row.documentUserId!,
       createdAt: row.documentCreatedAt,
       udpatedAt: row.documentUdpatedAt,

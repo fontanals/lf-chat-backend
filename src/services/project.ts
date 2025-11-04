@@ -1,5 +1,6 @@
 import z from "zod";
-import { IDataContext } from "../data/context";
+import { IDataContext } from "../data/data-context";
+import { IFileStorage } from "../files/file-storage";
 import { Project } from "../models/entities/project";
 import {
   CreateProjectRequest,
@@ -16,6 +17,7 @@ import {
   GetProjectsResponse,
   UpdateProjectResponse,
 } from "../models/responses/project";
+import { IDocumentRepository } from "../repositories/document";
 import { IProjectRepository } from "../repositories/project";
 import { ApplicationError } from "../utils/errors";
 import { getQueryStringArray, validateRequest } from "../utils/express";
@@ -44,15 +46,21 @@ export interface IProjectService {
 }
 
 export class ProjectService implements IProjectService {
-  private readonly datContext: IDataContext;
+  private readonly dataContext: IDataContext;
+  private readonly fileStorage: IFileStorage;
   private readonly projectRepository: IProjectRepository;
+  private readonly documentRepository: IDocumentRepository;
 
   constructor(
     dataContext: IDataContext,
-    projectRepository: IProjectRepository
+    fileStorage: IFileStorage,
+    projectRepository: IProjectRepository,
+    documentRepository: IDocumentRepository
   ) {
-    this.datContext = dataContext;
+    this.dataContext = dataContext;
+    this.fileStorage = fileStorage;
     this.projectRepository = projectRepository;
+    this.documentRepository = documentRepository;
   }
 
   async getProjects(authContext: AuthContext): Promise<GetProjectsResponse> {
@@ -142,17 +150,34 @@ export class ProjectService implements IProjectService {
     params: DeleteProjectParams,
     authContext: AuthContext
   ): Promise<DeleteProjectResponse> {
-    const projectExists = await this.projectRepository.exists({
+    const project = await this.projectRepository.findOne({
       id: params.projectId,
       userId: authContext.user.id,
+      includeDocuments: true,
     });
 
-    if (!projectExists) {
+    if (project == null) {
       throw ApplicationError.notFound();
     }
 
-    await this.projectRepository.delete(params.projectId);
+    try {
+      await this.dataContext.begin();
 
-    return params.projectId;
+      await this.fileStorage.deleteFiles(
+        project.documents!.map((document) => document.key)
+      );
+
+      await this.documentRepository.deleteAll({ projectId: params.projectId });
+
+      await this.projectRepository.delete(params.projectId);
+
+      await this.dataContext.commit();
+
+      return params.projectId;
+    } catch (error) {
+      await this.dataContext.rollback();
+
+      throw error;
+    }
   }
 }

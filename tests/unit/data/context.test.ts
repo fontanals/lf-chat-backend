@@ -1,5 +1,5 @@
 import { Pool, PoolClient } from "pg";
-import { DataContext } from "../../../src/data/context";
+import { DataContext } from "../../../src/data/data-context";
 
 describe("DataContext", () => {
   let client: jest.Mocked<PoolClient>;

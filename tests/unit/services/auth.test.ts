@@ -1,7 +1,7 @@
 import bcrypt from "bcrypt";
 import { randomUUID } from "crypto";
 import { addDays } from "date-fns";
-import { IDataContext } from "../../../src/data/context";
+import { IDataContext } from "../../../src/data/data-context";
 import { mapUserToDto, User } from "../../../src/models/entities/user";
 import { SignupRequest } from "../../../src/models/requests/auth";
 import { IRefreshTokenRepository } from "../../../src/repositories/refresh-token";

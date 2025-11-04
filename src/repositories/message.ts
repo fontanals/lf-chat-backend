@@ -1,4 +1,4 @@
-import { IDataContext } from "../data/context";
+import { IDataContext } from "../data/data-context";
 import { AssistantMessage, Message } from "../models/entities/message";
 import { ArrayUtils } from "../utils/arrays";
 import { NullablePartial } from "../utils/types";

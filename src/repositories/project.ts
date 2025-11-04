@@ -1,4 +1,4 @@
-import { IDataContext } from "../data/context";
+import { IDataContext } from "../data/data-context";
 import { Document } from "../models/entities/document";
 import { Project } from "../models/entities/project";
 import { ArrayUtils } from "../utils/arrays";
@@ -14,11 +14,12 @@ type ProjectQueryRow = {
   projectCreatedAt?: Date;
   projectUpdatedAt?: Date;
   documentId?: string;
+  documentKey?: string;
   documentName?: string;
-  documentPath?: string;
   documentMimetype?: string;
   documentSizeInBytes?: number;
-  documentchatId?: string | null;
+  documentIsProcessed?: boolean;
+  documentChatId?: string | null;
   documentProjectId?: string | null;
   documentUserId?: string;
   documentCreatedAt?: Date;
@@ -79,11 +80,12 @@ export class ProjectRepository implements IProjectRepository {
         ${
           filters?.includeDocuments
             ? `, document.id AS "documentId",
+              document.key AS "documentKey",
               document.name AS "documentName",
-              document.path AS "documentPath",
               document.mimetype AS "documentMimetype",
               document.size_in_bytes AS "documentSizeInBytes",
-              document.chat_id AS "documentchatId",
+              document.is_processed AS "documentIsProcessed",
+              document.chat_id AS "documentChatId",
               document.project_id AS "documentProjectId",
               document.user_id AS "documentUserId",
               document.created_at AS "documentCreatedAt",
@@ -150,11 +152,12 @@ export class ProjectRepository implements IProjectRepository {
         ${
           filters?.includeDocuments
             ? `, document.id AS "documentId",
+              document.key AS "documentKey",
               document.name AS "documentName",
-              document.path AS "documentPath",
               document.mimetype AS "documentMimetype",
               document.size_in_bytes AS "documentSizeInBytes",
-              document.chat_id AS "documentchatId",
+              document.is_processed AS "documentIsProcessed",
+              document.chat_id AS "documentChatId",
               document.project_id AS "documentProjectId",
               document.user_id AS "documentUserId",
               document.created_at AS "documentCreatedAt",
@@ -238,13 +241,14 @@ export class ProjectRepository implements IProjectRepository {
 
     return {
       id: row.documentId,
-      name: row.documentName ?? "",
-      path: row.documentPath ?? "",
-      mimetype: row.documentMimetype ?? "",
-      sizeInBytes: row.documentSizeInBytes ?? 0,
-      chatId: row.documentchatId,
+      key: row.documentKey!,
+      name: row.documentName!,
+      mimetype: row.documentMimetype!,
+      sizeInBytes: row.documentSizeInBytes!,
+      isProcessed: row.documentIsProcessed!,
+      chatId: row.documentChatId,
       projectId: row.documentProjectId,
-      userId: row.documentUserId ?? "",
+      userId: row.documentUserId!,
       createdAt: row.documentCreatedAt,
     };
   }
@@ -260,6 +264,7 @@ export class ProjectRepository implements IProjectRepository {
     rows.forEach((row) => {
       if (project == null || project.id !== row.projectId) {
         project = this.mapRowToProject(row);
+
         projects.push(project);
       }
 
@@ -268,6 +273,7 @@ export class ProjectRepository implements IProjectRepository {
 
         if (document != null) {
           project.documents = project.documents ?? [];
+
           project.documents.push(document);
         }
       }

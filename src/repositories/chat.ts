@@ -1,4 +1,4 @@
-import { IDataContext } from "../data/context";
+import { IDataContext } from "../data/data-context";
 import { Chat } from "../models/entities/chat";
 import { Project } from "../models/entities/project";
 import { ArrayUtils } from "../utils/arrays";

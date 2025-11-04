@@ -1,6 +1,6 @@
 import { randomUUID } from "crypto";
 import { addDays } from "date-fns";
-import { DataContext } from "../../../src/data/context";
+import { DataContext } from "../../../src/data/data-context";
 import { User } from "../../../src/models/entities/user";
 import { UserRepository } from "../../../src/repositories/user";
 import { createTestPool, insertUsers, truncateUsers } from "../../utils";

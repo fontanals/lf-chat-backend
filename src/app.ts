@@ -1,6 +1,7 @@
 import cookieParser from "cookie-parser";
 import cors from "cors";
 import { Express, json } from "express";
+import rateLimit from "express-rate-limit";
 import { Server } from "node:http";
 import { Pool } from "pg";
 import { config } from "./config";
@@ -29,6 +30,17 @@ export class Application {
     );
     expressApp.use(cookieParser());
     expressApp.use(json());
+
+    if (config.ENABLE_RATE_LIMITING) {
+      expressApp.use(
+        rateLimit({
+          windowMs: config.DEFAULT_RATE_LIMIT_WINDOW_IN_MINUTES * 60 * 1000,
+          max: config.DEFAULT_RATE_LIMIT_MAX_REQUESTS,
+          standardHeaders: true,
+          legacyHeaders: false,
+        })
+      );
+    }
 
     this.setupRoutes(expressApp);
 
@@ -59,25 +71,33 @@ export class Application {
 
   private setupRoutes(expressApp: Express) {
     expressApp.get("/api", (_, res) => {
-      res.json({ message: "Welcome to the AI Chat API.", version: "1.0.0" });
+      res.json({ title: "AI Chat API", version: "1.0.0" });
+    });
+
+    expressApp.get("/api/health", (_, res) => {
+      res.json({ status: "ok" });
     });
 
     expressApp.use("/api", createAuthRoutes(this.serviceContainer));
+
     expressApp.use(
       "/api/user",
       authMiddleware(this.serviceContainer),
       createUserRoutes(this.serviceContainer)
     );
+
     expressApp.use(
       "/api/projects",
       authMiddleware(this.serviceContainer),
       createProjectRoutes(this.serviceContainer)
     );
+
     expressApp.use(
       "/api/chats",
       authMiddleware(this.serviceContainer),
       createChatRoutes(this.serviceContainer)
     );
+
     expressApp.use(
       "/api/documents",
       authMiddleware(this.serviceContainer),

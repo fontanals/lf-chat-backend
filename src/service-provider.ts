@@ -1,5 +1,6 @@
 import { Pool } from "pg";
-import { DataContext, IDataContext } from "./data/context";
+import { DataContext, IDataContext } from "./data/data-context";
+import { FileStorage, IFileStorage } from "./files/file-storage";
 import { ChatRepository, IChatRepository } from "./repositories/chat";
 import {
   DocumentRepository,
@@ -10,6 +11,10 @@ import {
   IDocumentChunkRepository,
 } from "./repositories/document-chunk";
 import { IMessageRepository, MessageRepository } from "./repositories/message";
+import {
+  IOpenAiModelUsageRepository,
+  OpenAiModelUsageRepository,
+} from "./repositories/open-ai-model-usage";
 import { IProjectRepository, ProjectRepository } from "./repositories/project";
 import {
   IRefreshTokenRepository,
@@ -17,16 +22,17 @@ import {
 } from "./repositories/refresh-token";
 import { ISessionRepository, SessionRepository } from "./repositories/session";
 import { IUserRepository, UserRepository } from "./repositories/user";
+import { aiService } from "./services/ai";
 import { AssistantService, IAssistantService } from "./services/assistant";
 import { AuthService, IAuthService } from "./services/auth";
 import { ChatService, IChatService } from "./services/chat";
 import { DocumentService, IDocumentService } from "./services/document";
-import { DocumentManager, IDocumentManager } from "./services/document-manager";
 import { IProjectService, ProjectService } from "./services/project";
 import { IUserService, UserService } from "./services/user";
 
 type ServiceMap = {
   DataContext: IDataContext;
+  FileStorage: IFileStorage;
   UserRepository: IUserRepository;
   SessionRepository: ISessionRepository;
   RefreshTokenRepository: IRefreshTokenRepository;
@@ -35,7 +41,7 @@ type ServiceMap = {
   MessageRepository: IMessageRepository;
   DocumentRepository: IDocumentRepository;
   DocumentChunkRepository: IDocumentChunkRepository;
-  DocumentManager: IDocumentManager;
+  OpenAiModelUsageRepository: IOpenAiModelUsageRepository;
   AssistantService: IAssistantService;
   AuthService: IAuthService;
   UserService: IUserService;
@@ -141,6 +147,12 @@ export function registerServices(services: ServiceContainer, pool: Pool) {
   });
 
   services.register({
+    identifier: "FileStorage",
+    factory: () => new FileStorage(),
+    singleton: true,
+  });
+
+  services.register({
     identifier: "UserRepository",
     factory: (services) => new UserRepository(services.get("DataContext")),
   });
@@ -183,19 +195,9 @@ export function registerServices(services: ServiceContainer, pool: Pool) {
   });
 
   services.register({
-    identifier: "DocumentManager",
+    identifier: "OpenAiModelUsageRepository",
     factory: (services) =>
-      new DocumentManager(
-        services.get("DocumentRepository"),
-        services.get("DocumentChunkRepository"),
-        services.get("AssistantService")
-      ),
-  });
-
-  services.register({
-    identifier: "AssistantService",
-    factory: () => new AssistantService(),
-    singleton: true,
+      new OpenAiModelUsageRepository(services.get("DataContext")),
   });
 
   services.register({
@@ -219,11 +221,14 @@ export function registerServices(services: ServiceContainer, pool: Pool) {
   });
 
   services.register({
-    identifier: "ProjectService",
+    identifier: "AssistantService",
     factory: (services) =>
-      new ProjectService(
-        services.get("DataContext"),
-        services.get("ProjectRepository")
+      new AssistantService(
+        services.get("FileStorage"),
+        services.get("DocumentRepository"),
+        services.get("DocumentChunkRepository"),
+        services.get("OpenAiModelUsageRepository"),
+        aiService
       ),
   });
 
@@ -232,11 +237,24 @@ export function registerServices(services: ServiceContainer, pool: Pool) {
     factory: (services) =>
       new ChatService(
         services.get("DataContext"),
+        services.get("FileStorage"),
         services.get("UserRepository"),
+        services.get("ProjectRepository"),
         services.get("ChatRepository"),
         services.get("MessageRepository"),
-        services.get("AssistantService"),
-        services.get("DocumentManager")
+        services.get("DocumentRepository"),
+        services.get("AssistantService")
+      ),
+  });
+
+  services.register({
+    identifier: "ProjectService",
+    factory: (services) =>
+      new ProjectService(
+        services.get("DataContext"),
+        services.get("FileStorage"),
+        services.get("ProjectRepository"),
+        services.get("DocumentRepository")
       ),
   });
 
@@ -245,7 +263,8 @@ export function registerServices(services: ServiceContainer, pool: Pool) {
     factory: (services) =>
       new DocumentService(
         services.get("DataContext"),
-        services.get("DocumentManager")
+        services.get("FileStorage"),
+        services.get("DocumentRepository")
       ),
   });
 }

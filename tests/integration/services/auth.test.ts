@@ -3,7 +3,7 @@ import { randomUUID } from "crypto";
 import { addDays } from "date-fns";
 import jsonwebtoken from "jsonwebtoken";
 import { config } from "../../../src/config";
-import { DataContext } from "../../../src/data/context";
+import { DataContext } from "../../../src/data/data-context";
 import { RefreshToken } from "../../../src/models/entities/refresh-token";
 import { Session } from "../../../src/models/entities/session";
 import { mapUserToDto, User } from "../../../src/models/entities/user";

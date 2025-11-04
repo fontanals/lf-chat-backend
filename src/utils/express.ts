@@ -77,6 +77,7 @@ export function jsonRequestHandler(
 ): RequestHandler {
   return async (req, res, next) => {
     res.header("Content-Type", "application/json; charset=utf-8");
+    res.header("Cache-Control", "no-cache");
     res.header("Access-Control-Expose-Headers", "Authorization");
 
     try {
@@ -86,7 +87,7 @@ export function jsonRequestHandler(
 
       const response = successResponse(result);
 
-      res.json(response);
+      res.status(200).json(response);
     } catch (error) {
       next(error);
     }

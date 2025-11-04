@@ -1,21 +1,22 @@
-import { IDataContext } from "../data/context";
+import { IDataContext } from "../data/data-context";
 import { Document } from "../models/entities/document";
 import { ArrayUtils } from "../utils/arrays";
+import { NumberUtils } from "../utils/numbers";
+import { StringUtils } from "../utils/strings";
 import { NullablePartial } from "../utils/types";
 
 export type DocumentFilters = NullablePartial<Document & { ids: string[] }>;
 
 export interface IDocumentRepository {
+  count(filters?: DocumentFilters): Promise<number>;
   exists(filters?: DocumentFilters): Promise<boolean>;
   findAll(filters?: DocumentFilters): Promise<Document[]>;
+  findAny(filters?: DocumentFilters): Promise<Document[]>;
   findOne(filters?: DocumentFilters): Promise<Document | null>;
   create(document: Document): Promise<void>;
   update(id: string, document: NullablePartial<Document>): Promise<void>;
   delete(id: string): Promise<void>;
-  getChatAndProjectDocuments(
-    chatId: string,
-    projectId?: string | null
-  ): Promise<Document[]>;
+  deleteAll(filters?: DocumentFilters): Promise<void>;
 }
 
 export class DocumentRepository implements IDocumentRepository {
@@ -23,6 +24,37 @@ export class DocumentRepository implements IDocumentRepository {
 
   constructor(dataContext: IDataContext) {
     this.dataContext = dataContext;
+  }
+
+  async count(filters?: DocumentFilters): Promise<number> {
+    let paramsCount = 0;
+
+    const result = await this.dataContext.query<{ count: string }>(
+      `SELECT COUNT(1) AS "count"
+      FROM "document"
+      WHERE
+        ${filters?.id != null ? `id = $${++paramsCount} AND` : ""}
+        ${filters?.key != null ? `key = $${++paramsCount} AND` : ""}
+        ${filters?.chatId != null ? `chat_id = $${++paramsCount} AND` : ""}
+        ${
+          filters?.projectId != null ? `project_id = $${++paramsCount} AND` : ""
+        }
+        ${filters?.userId != null ? `user_id = $${++paramsCount} AND` : ""}
+        ${filters?.ids != null ? `id = ANY($${++paramsCount}) AND` : ""}
+        TRUE;`,
+      [
+        filters?.id,
+        filters?.key,
+        filters?.chatId,
+        filters?.projectId,
+        filters?.userId,
+        filters?.ids,
+      ].filter((param) => param != null)
+    );
+
+    const count = NumberUtils.safeParseInt(result.rows[0]?.count, 0);
+
+    return count;
   }
 
   async exists(filters?: DocumentFilters): Promise<boolean> {
@@ -33,7 +65,7 @@ export class DocumentRepository implements IDocumentRepository {
       FROM "document"
       WHERE
         ${filters?.id != null ? `id = $${++paramsCount} AND` : ""}
-        ${filters?.path != null ? `path = $${++paramsCount} AND` : ""}
+        ${filters?.key != null ? `key = $${++paramsCount} AND` : ""}
         ${filters?.chatId != null ? `chat_id = $${++paramsCount} AND` : ""}
         ${
           filters?.projectId != null ? `project_id = $${++paramsCount} AND` : ""
@@ -44,7 +76,7 @@ export class DocumentRepository implements IDocumentRepository {
       LIMIT 1;`,
       [
         filters?.id,
-        filters?.path,
+        filters?.key,
         filters?.chatId,
         filters?.projectId,
         filters?.userId,
@@ -63,10 +95,11 @@ export class DocumentRepository implements IDocumentRepository {
     const result = await this.dataContext.query<Document>(
       `SELECT
         id,
+        key,
         name,
-        path,
         mimetype,
         size_in_bytes AS "sizeInBytes",
+        is_processed AS "isProcessed",
         chat_id AS "chatId",
         project_id AS "projectId",
         user_id AS "userId",
@@ -75,7 +108,7 @@ export class DocumentRepository implements IDocumentRepository {
       FROM "document"
       WHERE
         ${filters?.id != null ? `id = $${++paramsCount} AND` : ""}
-        ${filters?.path != null ? `path = $${++paramsCount} AND` : ""}
+        ${filters?.key != null ? `key = $${++paramsCount} AND` : ""}
         ${filters?.chatId != null ? `chat_id = $${++paramsCount} AND` : ""}
         ${
           filters?.projectId != null ? `project_id = $${++paramsCount} AND` : ""
@@ -86,7 +119,46 @@ export class DocumentRepository implements IDocumentRepository {
       ORDER BY created_at;`,
       [
         filters?.id,
-        filters?.path,
+        filters?.key,
+        filters?.chatId,
+        filters?.projectId,
+        filters?.userId,
+        filters?.ids,
+      ].filter((param) => param != null)
+    );
+
+    return result.rows;
+  }
+
+  async findAny(filters?: DocumentFilters): Promise<Document[]> {
+    let paramsCount = 0;
+
+    const result = await this.dataContext.query<Document>(
+      `SELECT
+        id,
+        key,
+        name,
+        mimetype,
+        size_in_bytes AS "sizeInBytes",
+        is_processed AS "isProcessed",
+        chat_id AS "chatId",
+        project_id AS "projectId",
+        user_id AS "userId",
+        created_at AS "createdAt",
+        updated_at AS "updatedAt"
+      FROM "document"
+      WHERE
+        ${filters?.id != null ? `id = $${++paramsCount} OR` : ""}
+        ${filters?.key != null ? `key = $${++paramsCount} OR` : ""}
+        ${filters?.chatId != null ? `chat_id = $${++paramsCount} OR` : ""}
+        ${filters?.projectId != null ? `project_id = $${++paramsCount} OR` : ""}
+        ${filters?.userId != null ? `user_id = $${++paramsCount} OR` : ""}
+        ${filters?.ids != null ? `id = ANY($${++paramsCount}) OR` : ""}
+        FALSE
+      ORDER BY created_at;`,
+      [
+        filters?.id,
+        filters?.key,
         filters?.chatId,
         filters?.projectId,
         filters?.userId,
@@ -103,10 +175,11 @@ export class DocumentRepository implements IDocumentRepository {
     const result = await this.dataContext.query<Document>(
       `SELECT
         id,
+        key,
         name,
-        path,
         mimetype,
         size_in_bytes AS "sizeInBytes",
+        is_processed AS "isProcessed",
         chat_id AS "chatId",
         project_id AS "projectId",
         user_id AS "userId",
@@ -115,7 +188,7 @@ export class DocumentRepository implements IDocumentRepository {
       FROM "document"
       WHERE
         ${filters?.id != null ? `id = $${++paramsCount} AND` : ""}
-        ${filters?.path != null ? `path = $${++paramsCount} AND` : ""}
+        ${filters?.key != null ? `key = $${++paramsCount} AND` : ""}
         ${filters?.chatId != null ? `chat_id = $${++paramsCount} AND` : ""}
         ${
           filters?.projectId != null ? `project_id = $${++paramsCount} AND` : ""
@@ -126,7 +199,7 @@ export class DocumentRepository implements IDocumentRepository {
       LIMIT 1;`,
       [
         filters?.id,
-        filters?.path,
+        filters?.key,
         filters?.chatId,
         filters?.projectId,
         filters?.userId,
@@ -142,15 +215,16 @@ export class DocumentRepository implements IDocumentRepository {
   async create(document: Document): Promise<void> {
     await this.dataContext.execute(
       `INSERT INTO "document"
-      (id, name, path, mimetype, size_in_bytes, chat_id, project_id, user_id)
+      (id, key, name, mimetype, size_in_bytes, is_processed, chat_id, project_id, user_id)
       VALUES
-      ($1, $2, $3, $4, $5, $6, $7, $8);`,
+      ($1, $2, $3, $4, $5, $6, $7, $8, $9);`,
       [
         document.id,
+        document.key,
         document.name,
-        document.path,
         document.mimetype,
         document.sizeInBytes,
+        document.isProcessed,
         document.chatId,
         document.projectId,
         document.userId,
@@ -165,6 +239,11 @@ export class DocumentRepository implements IDocumentRepository {
       `UPDATE "document"
       SET
         ${document.name != null ? `name = $${++paramsCount},` : ""}
+        ${
+          document.isProcessed != null
+            ? `is_processed = $${++paramsCount},`
+            : ""
+        }
         ${document.chatId != null ? `chat_id = $${++paramsCount},` : ""}
         ${document.chatId === null ? `chat_id = NULL,` : ""}
         ${document.projectId != null ? `project_id = $${++paramsCount},` : ""}
@@ -172,9 +251,13 @@ export class DocumentRepository implements IDocumentRepository {
         id = id
       WHERE
         id = $${++paramsCount};`,
-      [document.name, document.chatId, document.projectId, id].filter(
-        (param) => param != null
-      )
+      [
+        document.name,
+        document.isProcessed,
+        document.chatId,
+        document.projectId,
+        id,
+      ].filter((param) => param != null)
     );
   }
 
@@ -187,33 +270,28 @@ export class DocumentRepository implements IDocumentRepository {
     );
   }
 
-  async getChatAndProjectDocuments(
-    chatId: string,
-    projectId?: string | null
-  ): Promise<Document[]> {
+  async deleteAll(filters?: DocumentFilters): Promise<void> {
+    if (
+      StringUtils.allIsNullOrEmpty(
+        filters?.chatId,
+        filters?.projectId,
+        filters?.userId
+      )
+    ) {
+      return;
+    }
+
     let paramsCount = 0;
 
-    const result = await this.dataContext.query<Document>(
-      `SELECT
-        id,
-        name,
-        path,
-        mimetype,
-        size_in_bytes AS "sizeInBytes",
-        chat_id AS "chatId",
-        project_id AS "projectId",
-        user_id AS "userId",
-        created_at AS "createdAt",
-        updated_at AS "updatedAt"
-      FROM "document"
+    await this.dataContext.execute(
+      `DELETE FROM "document"
       WHERE
-        chat_id = $${++paramsCount} AND
-        ${projectId != null ? `project_id = $${++paramsCount} AND` : ""}
-        TRUE
-      ORDER BY created_at;`,
-      [chatId, projectId].filter((param) => param != null)
+        ${filters?.chatId != null ? `chat_id = $${++paramsCount} AND` : ""}
+        ${
+          filters?.projectId != null ? `project_id = $${++paramsCount} AND` : ""
+        }
+        ${filters?.userId != null ? `user_id = $${++paramsCount} AND` : ""}
+        TRUE;`
     );
-
-    return result.rows;
   }
 }

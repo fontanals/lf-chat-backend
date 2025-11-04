@@ -9,6 +9,8 @@ export type GetChatsQuery = {
 
 export type GetChatParams = { chatId: string };
 
+export type GetChatQuery = { expand?: string[] };
+
 export type GetChatMessagesParams = { chatId: string };
 
 export type CreateChatRequest = {

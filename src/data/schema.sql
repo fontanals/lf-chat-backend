@@ -2,7 +2,7 @@ CREATE EXTENSION IF NOT EXISTS vector;
 
 CREATE FUNCTION set_updated_at() RETURNS TRIGGER AS $$
 BEGIN
-    NEW.updated_at = CURRENT_TIMESTAMP;
+    NEW.updated_at = now();
     RETURN NEW;
 END;
 $$ LANGUAGE plpgsql;
@@ -14,8 +14,8 @@ CREATE TABLE "user" (
     "password" text NOT NULL,
     "display_name" text NOT NULL,
     "custom_prompt" text,
-    "created_at" timestamp with time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updated_at" timestamp with time zone NOT NULL DEFAULT CURRENT_TIMESTAMP
+    "created_at" timestamp with time zone NOT NULL DEFAULT now(),
+    "updated_at" timestamp with time zone NOT NULL DEFAULT now()
 );
 
 CREATE TRIGGER set_user_updated_at
@@ -27,7 +27,7 @@ CREATE TABLE "session" (
     "id" uuid PRIMARY KEY,
     "expires_at" timestamp with time zone NOT NULL,
     "user_id" uuid NOT NULL REFERENCES "user"("id") ON DELETE CASCADE,
-    "created_at" timestamp with time zone NOT NULL DEFAULT CURRENT_TIMESTAMP
+    "created_at" timestamp with time zone NOT NULL DEFAULT now()
 );
 
 CREATE TABLE "refresh_token" (
@@ -35,8 +35,8 @@ CREATE TABLE "refresh_token" (
     "token" text NOT NULL,
     "expires_at" timestamp with time zone NOT NULL,
     "is_revoked" boolean NOT NULL DEFAULT false,
-    "created_at" timestamp with time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updated_at" timestamp with time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "created_at" timestamp with time zone NOT NULL DEFAULT now(),
+    "updated_at" timestamp with time zone NOT NULL DEFAULT now(),
     "session_id" uuid NOT NULL REFERENCES "session"("id") ON DELETE CASCADE
 );
 
@@ -50,8 +50,8 @@ CREATE TABLE "project" (
     "id" uuid PRIMARY KEY,
     "title" text NOT NULL,
     "description" text NOT NULL,
-    "created_at" timestamp with time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updated_at" timestamp with time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "created_at" timestamp with time zone NOT NULL DEFAULT now(),
+    "updated_at" timestamp with time zone NOT NULL DEFAULT now(),
     "user_id" uuid NOT NULL REFERENCES "user"("id") ON DELETE CASCADE
 );
 
@@ -63,8 +63,8 @@ EXECUTE FUNCTION set_updated_at();
 CREATE TABLE "chat" (
     "id" uuid PRIMARY KEY,
     "title" text NOT NULL,
-    "created_at" timestamp with time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updated_at" timestamp with time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "created_at" timestamp with time zone NOT NULL DEFAULT now(),
+    "updated_at" timestamp with time zone NOT NULL DEFAULT now(),
     "project_id" uuid REFERENCES "project"("id") ON DELETE CASCADE,
     "user_id" uuid NOT NULL REFERENCES "user"("id") ON DELETE CASCADE
 );
@@ -84,8 +84,8 @@ CREATE TABLE "message" (
     "content" jsonb NOT NULL,
     "feedback" message_feedback,
     "finish_reason" message_finish_reason,
-    "created_at" timestamp with time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updated_at" timestamp with time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "created_at" timestamp with time zone NOT NULL DEFAULT now(),
+    "updated_at" timestamp with time zone NOT NULL DEFAULT now(),
     "parent_message_id" uuid REFERENCES "message"("id") ON DELETE CASCADE,
     "chat_id" uuid NOT NULL REFERENCES "chat"("id") ON DELETE CASCADE
 );
@@ -97,12 +97,13 @@ EXECUTE FUNCTION set_updated_at();
 
 CREATE TABLE "document" (
     "id" uuid PRIMARY KEY,
+    "key" text NOT NULL UNIQUE,
     "name" text NOT NULL,
-    "path" text NOT NULL UNIQUE,
     "mimetype" text NOT NULL,
     "size_in_bytes" integer NOT NULL,
-    "created_at" timestamp with time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updated_at" timestamp with time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "is_processed" boolean NOT NULL DEFAULT false,
+    "created_at" timestamp with time zone NOT NULL DEFAULT now(),
+    "updated_at" timestamp with time zone NOT NULL DEFAULT now(),
     "chat_id" uuid REFERENCES "chat"("id") ON DELETE CASCADE,
     "project_id" uuid REFERENCES "project"("id") ON DELETE CASCADE,
     "user_id" uuid NOT NULL REFERENCES "user"("id") ON DELETE CASCADE
@@ -118,6 +119,32 @@ CREATE TABLE "document_chunk" (
     "index" integer NOT NULL,
     "content" text NOT NULL,
     "embedding" vector(1536) NOT NULL,
-    "created_at" timestamp with time zone NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "created_at" timestamp with time zone NOT NULL DEFAULT now(),
     "document_id" uuid NOT NULL REFERENCES "document"("id") ON DELETE CASCADE
 );
+
+CREATE TABLE "open_ai_model_usage" (
+    "model" text PRIMARY KEY,
+    "input_tokens" integer NOT NULL,
+    "output_tokens" integer NOT NULL,
+    "total_tokens" integer NOT NULL,
+    "created_at" timestamp with time zone NOT NULL DEFAULT now(),
+    "updated_at" timestamp with time zone NOT NULL DEFAULT now()
+);
+
+CREATE TRIGGER set_open_ai_model_usage_updated_at
+BEFORE UPDATE ON "open_ai_model_usage"
+FOR EACH ROW
+EXECUTE FUNCTION set_updated_at();
+
+INSERT INTO "user"
+(id, name, email, password, display_name, custom_prompt)
+VALUES
+(gen_random_uuid(), 'Demo User', 'demo@ai-chat.com', '$2b$10$NOARcGh.tPYQTLgSi23kjuiHJNHFxC7diXdMt2JT0rcyX4Pctt3L2', 'Demo', '');
+
+INSERT INTO "open_ai_model_usage"
+(model, input_tokens, output_tokens, total_tokens)
+VALUES
+('gpt-5-nano', 0, 0, 0),
+('gpt-4o-mini', 0, 0, 0),
+('text-embedding-3-small', 0, 0, 0);

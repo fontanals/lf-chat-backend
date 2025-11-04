@@ -1,5 +1,7 @@
 import z from "zod";
-import { IDataContext } from "../data/context";
+import { config } from "../config";
+import { IDataContext } from "../data/data-context";
+import { IFileStorage } from "../files/file-storage";
 import { Document } from "../models/entities/document";
 import {
   DeleteDocumentParams,
@@ -9,10 +11,10 @@ import {
   DeleteDocumentResponse,
   UploadDocumentResponse,
 } from "../models/responses/document";
+import { IDocumentRepository } from "../repositories/document";
 import { ApplicationError } from "../utils/errors";
 import { validateRequest } from "../utils/express";
 import { AuthContext } from "./auth";
-import { IDocumentManager } from "./document-manager";
 
 export interface IDocumentService {
   uploadDocument(
@@ -28,11 +30,17 @@ export interface IDocumentService {
 
 export class DocumentService implements IDocumentService {
   private readonly dataContext: IDataContext;
-  private readonly documentManager: IDocumentManager;
+  private readonly fileStorage: IFileStorage;
+  private readonly documentRepository: IDocumentRepository;
 
-  constructor(dataContext: IDataContext, documentManager: IDocumentManager) {
+  constructor(
+    dataContext: IDataContext,
+    fileStorage: IFileStorage,
+    documentRepository: IDocumentRepository
+  ) {
     this.dataContext = dataContext;
-    this.documentManager = documentManager;
+    this.fileStorage = fileStorage;
+    this.documentRepository = documentRepository;
   }
 
   async uploadDocument(
@@ -42,60 +50,60 @@ export class DocumentService implements IDocumentService {
   ): Promise<UploadDocumentResponse> {
     validateRequest(
       request,
-      z.object({
-        id: z.string(),
-        projectId: z.string().optional(),
-      })
+      z.object({ id: z.string(), projectId: z.string().optional() })
     );
 
     if (file == null) {
       throw ApplicationError.badRequest();
     }
 
-    try {
-      await this.dataContext.begin();
+    const userDocumentsCount = await this.documentRepository.count({
+      userId: authContext.user.id,
+    });
 
-      const document: Document = {
-        id: request.id,
-        name: file.originalname,
-        path: "",
-        mimetype: file.mimetype,
-        sizeInBytes: file.size,
-        chatId: null,
-        projectId: request.projectId,
-        userId: authContext.user.id,
-      };
-
-      await this.documentManager.createDocument(document, file);
-
-      if (request.projectId != null) {
-        await this.documentManager.processDocument(document.id);
-      }
-
-      await this.dataContext.commit();
-
-      return document.id;
-    } catch (error) {
-      await this.dataContext.rollback();
-
-      throw error;
+    if (userDocumentsCount >= config.MAX_DOCUMENTS_PER_USER) {
+      throw ApplicationError.maxUserDocumentsReached();
     }
+
+    const document: Document = {
+      id: request.id,
+      key: `${authContext.user.id}/${request.id}_${file.originalname}`,
+      name: file.originalname,
+      mimetype: file.mimetype,
+      sizeInBytes: file.size,
+      isProcessed: false,
+      chatId: null,
+      projectId: request.projectId,
+      userId: authContext.user.id,
+    };
+
+    await this.fileStorage.writeFile(
+      document.key,
+      document.mimetype,
+      file.buffer
+    );
+
+    await this.documentRepository.create(document);
+
+    return document.id;
   }
 
   async deleteDocument(
     params: DeleteDocumentParams,
     authContext: AuthContext
   ): Promise<DeleteDocumentResponse> {
-    const documentExists = await this.documentManager.documentExists({
+    const document = await this.documentRepository.findOne({
       id: params.documentId,
       userId: authContext.user.id,
     });
 
-    if (!documentExists) {
+    if (document == null) {
       throw ApplicationError.notFound();
     }
 
-    await this.documentManager.deleteDocument(params.documentId);
+    await this.fileStorage.deleteFile(document.key);
+
+    await this.documentRepository.delete(params.documentId);
 
     return params.documentId;
   }

@@ -1,5 +1,5 @@
 import { randomUUID } from "crypto";
-import { IDataContext } from "../../../src/data/context";
+import { IDataContext } from "../../../src/data/data-context";
 import { RefreshToken } from "../../../src/models/entities/refresh-token";
 import { RefreshTokenRepository } from "../../../src/repositories/refresh-token";
 

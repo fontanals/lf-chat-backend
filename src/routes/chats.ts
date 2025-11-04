@@ -14,6 +14,17 @@ export function createChatRoutes(serviceContainer: ServiceContainer) {
   const router = Router();
 
   router.get(
+    "/assistant-mode",
+    jsonRequestHandler(serviceContainer, async (req, res, services) => {
+      const chatService = services.get("ChatService");
+
+      const response = await chatService.getAssistantMode();
+
+      return response;
+    })
+  );
+
+  router.get(
     "/",
     jsonRequestHandler(serviceContainer, async (req, res, services) => {
       const chatService = services.get("ChatService");
@@ -31,6 +42,7 @@ export function createChatRoutes(serviceContainer: ServiceContainer) {
 
       const response = await chatService.getChat(
         req.params as GetChatParams,
+        req.query,
         req.authContext
       );
 

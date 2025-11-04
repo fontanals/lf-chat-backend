@@ -1,5 +1,5 @@
 import { randomUUID } from "crypto";
-import { IDataContext } from "../../../src/data/context";
+import { IDataContext } from "../../../src/data/data-context";
 import { Chat } from "../../../src/models/entities/chat";
 import { Message } from "../../../src/models/entities/message";
 import { ChatRepository } from "../../../src/repositories/chat";

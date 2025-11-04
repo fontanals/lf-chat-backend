@@ -1,16 +1,19 @@
-import { IDataContext } from "../data/context";
+import { IDataContext } from "../data/data-context";
 import { User } from "../models/entities/user";
 import { ArrayUtils } from "../utils/arrays";
+import { NumberUtils } from "../utils/numbers";
 import { NullablePartial } from "../utils/types";
 
 export type UserFilters = NullablePartial<User>;
 
 export interface IUserRepository {
+  count(filters?: UserFilters): Promise<number>;
   exists(filters: UserFilters): Promise<boolean>;
   findAll(filters?: UserFilters): Promise<User[]>;
   findOne(filters?: UserFilters): Promise<User | null>;
   create(user: User): Promise<void>;
   update(id: string, user: NullablePartial<User>): Promise<void>;
+  delete(id: string): Promise<void>;
 }
 
 export class UserRepository implements IUserRepository {
@@ -18,6 +21,33 @@ export class UserRepository implements IUserRepository {
 
   constructor(dataContext: IDataContext) {
     this.dataContext = dataContext;
+  }
+
+  async count(filters?: UserFilters): Promise<number> {
+    let paramsCount = 0;
+
+    const result = await this.dataContext.query<{ count: string }>(
+      `SELECT COUNT(1) AS "count"
+      FROM "user"
+      WHERE
+        ${filters?.id != null ? `id = $${++paramsCount} AND` : ""}
+        ${filters?.name != null ? `name ILIKE $${++paramsCount} AND` : ""}
+        ${
+          filters?.email != null
+            ? `lower(email) = lower($${++paramsCount}) AND`
+            : ""
+        }
+        TRUE;`,
+      [
+        filters?.id,
+        filters?.name != null ? `%${filters.name}%` : null,
+        filters?.email,
+      ].filter((param) => param != null)
+    );
+
+    const count = NumberUtils.safeParseInt(result.rows[0]?.count, 0);
+
+    return count;
   }
 
   async exists(filters?: UserFilters): Promise<boolean> {
@@ -158,6 +188,14 @@ export class UserRepository implements IUserRepository {
         user.customPrompt,
         id,
       ].filter((param) => param != null)
+    );
+  }
+
+  async delete(id: string): Promise<void> {
+    await this.dataContext.execute(
+      `DELETE FROM "user"
+      WHERE id = $1;`,
+      [id]
     );
   }
 }

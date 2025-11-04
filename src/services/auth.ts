@@ -4,12 +4,13 @@ import { addDays } from "date-fns";
 import jsonwebtoken from "jsonwebtoken";
 import z from "zod";
 import { config } from "../config";
-import { IDataContext } from "../data/context";
+import { IDataContext } from "../data/data-context";
 import { RefreshToken } from "../models/entities/refresh-token";
 import { Session } from "../models/entities/session";
-import { mapUserToDto, User, UserDto } from "../models/entities/user";
+import { mapUserToDto, User } from "../models/entities/user";
 import { SigninRequest, SignupRequest } from "../models/requests/auth";
 import {
+  DeleteAccountResponse,
   SigninReponse,
   SignoutResponse,
   SignupResponse,
@@ -56,6 +57,7 @@ export interface IAuthService {
   signup(request: SignupRequest): Promise<WithTokens<SignupResponse>>;
   signin(request: SigninRequest): Promise<WithTokens<SigninReponse>>;
   signout(authContext: AuthContext): Promise<SignoutResponse>;
+  deleteAccount(authContext: AuthContext): Promise<DeleteAccountResponse>;
   validateAccessToken(accessToken: string): ValidateAccessTokenResponse;
   refreshToken(refreshToken: string): Promise<RefreshTokenResponse>;
 }
@@ -89,6 +91,12 @@ export class AuthService implements IAuthService {
           .min(8, "Password must be at least 8 characters long."),
       })
     );
+
+    const usersCount = await this.userRepository.count();
+
+    if (usersCount >= config.MAX_USERS) {
+      throw ApplicationError.maxUsersReached();
+    }
 
     const isInvalidEmail = await this.userRepository.exists({
       email: request.email,
@@ -232,6 +240,14 @@ export class AuthService implements IAuthService {
 
   async signout(authContext: AuthContext): Promise<SignoutResponse> {
     await this.refreshTokenRepository.revokeSession(authContext.session.id);
+
+    return authContext.user.id;
+  }
+
+  async deleteAccount(
+    authContext: AuthContext
+  ): Promise<DeleteAccountResponse> {
+    await this.userRepository.delete(authContext.user.id);
 
     return authContext.user.id;
   }

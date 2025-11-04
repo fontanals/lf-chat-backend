@@ -1,6 +1,6 @@
 import { randomUUID } from "crypto";
 import { addDays } from "date-fns";
-import { DataContext } from "../../../src/data/context";
+import { DataContext } from "../../../src/data/data-context";
 import { Chat } from "../../../src/models/entities/chat";
 import { User } from "../../../src/models/entities/user";
 import { ChatRepository } from "../../../src/repositories/chat";
