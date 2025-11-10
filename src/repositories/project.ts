@@ -205,7 +205,7 @@ export class ProjectRepository implements IProjectRepository {
     await this.dataContext.execute(
       `UPDATE "project"
       SET
-        ${project.title != null ? `name = $${++paramsCount},` : ""}
+        ${project.title != null ? `title = $${++paramsCount},` : ""}
         ${project.description != null ? `description = $${++paramsCount},` : ""}
         id = id
       WHERE
@@ -250,6 +250,7 @@ export class ProjectRepository implements IProjectRepository {
       projectId: row.documentProjectId,
       userId: row.documentUserId!,
       createdAt: row.documentCreatedAt,
+      updatedAt: row.documentUpdatedAt,
     };
   }
 
@@ -269,11 +270,11 @@ export class ProjectRepository implements IProjectRepository {
       }
 
       if (includeDocuments) {
+        project.documents = project.documents ?? [];
+
         const document = this.mapRowToDocument(row);
 
         if (document != null) {
-          project.documents = project.documents ?? [];
-
           project.documents.push(document);
         }
       }

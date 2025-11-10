@@ -3,7 +3,7 @@ import { errorResponse } from "../models/responses/response";
 import { ApplicationError } from "../utils/errors";
 
 export const errorMiddleware: ErrorRequestHandler = (error, req, res, next) => {
-  console.error("ERROR: ", error);
+  // console.error("ERROR: ", error);
 
   const applicationError =
     error instanceof ApplicationError

@@ -64,7 +64,7 @@ export type SendMessageEvent =
 
 export type GetAssistantModeResponse = AssistantMode;
 
-export type GetChatsResponse = CursorPagination<Chat, string>;
+export type GetChatsResponse = CursorPagination<Chat, Date>;
 
 export type GetChatResponse = Chat;
 

@@ -152,7 +152,6 @@ export class ChatRepository implements IChatRepository {
           }
           ${filters?.userId != null ? `user_id = $${++paramsCount} AND` : ""}
           TRUE
-        ORDER BY created_at DESC
       )
       SELECT
         chat_cte.id AS "chatId",
@@ -305,7 +304,7 @@ export class ChatRepository implements IChatRepository {
       userId: row.chatUserId,
       createdAt: row.chatCreatedAt,
       updatedAt: row.chatUpdatedAt,
-      project: includeProject ? this.mapRowToProject(row) : null,
+      project: includeProject ? this.mapRowToProject(row) : undefined,
     };
   }
 

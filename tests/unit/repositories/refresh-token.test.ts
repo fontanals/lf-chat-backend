@@ -8,13 +8,15 @@ describe("RefreshTokenRepository", () => {
   let refreshTokenRepository: RefreshTokenRepository;
 
   const mockRefreshTokens: RefreshToken[] = Array.from(
-    { length: 5 },
+    { length: 10 },
     (_, index) => ({
       id: randomUUID(),
-      token: `refresh token ${index + 1}`,
+      token: `Refresh Token ${index + 1}`,
       expiresAt: new Date(),
       isRevoked: false,
       sessionId: randomUUID(),
+      createdAt: new Date(),
+      updatedAt: new Date(),
     })
   );
 

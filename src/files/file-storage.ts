@@ -6,6 +6,7 @@ import {
 } from "@aws-sdk/client-s3";
 import { config } from "../config";
 import { s3Client } from "./s3-client";
+import { ArrayUtils } from "../utils/arrays";
 
 export interface IFileStorage {
   readFile(key: string): Promise<Buffer>;
@@ -53,6 +54,10 @@ export class FileStorage implements IFileStorage {
   }
 
   async deleteFiles(keys: string[]): Promise<void> {
+    if (ArrayUtils.isNullOrEmpty(keys)) {
+      return;
+    }
+
     const command = new DeleteObjectsCommand({
       Bucket: config.AWS_S3_BUCKET_NAME,
       Delete: { Objects: keys.map((key) => ({ Key: key })) },

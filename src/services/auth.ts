@@ -10,7 +10,6 @@ import { Session } from "../models/entities/session";
 import { mapUserToDto, User } from "../models/entities/user";
 import { SigninRequest, SignupRequest } from "../models/requests/auth";
 import {
-  DeleteAccountResponse,
   SigninReponse,
   SignoutResponse,
   SignupResponse,
@@ -22,7 +21,12 @@ import { ApplicationError } from "../utils/errors";
 import { validateRequest } from "../utils/express";
 
 export type AuthContext = {
-  session: Session;
+  session: {
+    id: string;
+    expiresAt: string;
+    userId: string;
+    createdAt?: string;
+  };
   user: { id: string; name: string; email: string };
 };
 
@@ -57,7 +61,6 @@ export interface IAuthService {
   signup(request: SignupRequest): Promise<WithTokens<SignupResponse>>;
   signin(request: SigninRequest): Promise<WithTokens<SigninReponse>>;
   signout(authContext: AuthContext): Promise<SignoutResponse>;
-  deleteAccount(authContext: AuthContext): Promise<DeleteAccountResponse>;
   validateAccessToken(accessToken: string): ValidateAccessTokenResponse;
   refreshToken(refreshToken: string): Promise<RefreshTokenResponse>;
 }
@@ -124,12 +127,13 @@ export class AuthService implements IAuthService {
     };
 
     const authContext: AuthContext = {
-      session,
-      user: {
-        id: user.id,
-        name: user.name,
-        email: user.email,
+      session: {
+        id: session.id,
+        expiresAt: session.expiresAt.toISOString(),
+        userId: session.userId,
+        createdAt: new Date().toISOString(),
       },
+      user: { id: user.id, name: user.name, email: user.email },
     };
 
     const accessToken = this.generateAccessToken(authContext);
@@ -196,12 +200,12 @@ export class AuthService implements IAuthService {
     };
 
     const authContext: AuthContext = {
-      session,
-      user: {
-        id: user.id,
-        name: user.name,
-        email: user.email,
+      session: {
+        id: session.id,
+        expiresAt: session.expiresAt.toISOString(),
+        userId: session.userId,
       },
+      user: { id: user.id, name: user.name, email: user.email },
     };
 
     const accessToken = this.generateAccessToken(authContext);
@@ -240,14 +244,6 @@ export class AuthService implements IAuthService {
 
   async signout(authContext: AuthContext): Promise<SignoutResponse> {
     await this.refreshTokenRepository.revokeSession(authContext.session.id);
-
-    return authContext.user.id;
-  }
-
-  async deleteAccount(
-    authContext: AuthContext
-  ): Promise<DeleteAccountResponse> {
-    await this.userRepository.delete(authContext.user.id);
 
     return authContext.user.id;
   }
@@ -301,13 +297,13 @@ export class AuthService implements IAuthService {
       });
 
       const newAccessToken = this.generateAccessToken({
-        user: authContext.user,
         session: authContext.session,
+        user: authContext.user,
       });
 
       const newRefreshToken = this.generateRefreshToken({
-        user: authContext.user,
         session: authContext.session,
+        user: authContext.user,
       });
 
       const newRefreshTokenData: RefreshToken = {

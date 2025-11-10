@@ -45,8 +45,7 @@ export class RefreshTokenRepository implements IRefreshTokenRepository {
         ${
           filters?.isRevoked != null ? `is_revoked = $${++paramsCount} AND` : ""
         }
-        TRUE
-      ORDER BY created_at;`,
+        TRUE;`,
       [
         filters?.id,
         filters?.token,

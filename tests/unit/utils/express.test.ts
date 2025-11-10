@@ -1,12 +1,10 @@
 import { randomUUID } from "crypto";
 import { Request, Response } from "express";
 import z from "zod";
-import {
-  errorResponse,
-  successResponse,
-} from "../../../src/models/responses/response";
+import { SendMessageEvent } from "../../../src/models/responses/chat";
+import { successResponse } from "../../../src/models/responses/response";
 import { ServiceContainer } from "../../../src/service-provider";
-import { ApplicationError, HttpStatusCode } from "../../../src/utils/errors";
+import { ApplicationError } from "../../../src/utils/errors";
 import {
   getQueryDate,
   getQueryNumber,
@@ -16,6 +14,7 @@ import {
   sseRequestHandler,
   validateRequest,
 } from "../../../src/utils/express";
+import { PromiseUtils } from "../../../src/utils/promises";
 import { ServerSentEvent } from "../../../src/utils/types";
 
 describe("Express Utils", () => {
@@ -31,6 +30,7 @@ describe("Express Utils", () => {
     request = {} as unknown as jest.Mocked<Request>;
 
     response = {
+      on: jest.fn(),
       status: jest.fn().mockReturnThis(),
       header: jest.fn(),
       json: jest.fn(),
@@ -137,7 +137,7 @@ describe("Express Utils", () => {
   });
 
   describe("validateRequest", () => {
-    it("should throw a bad request error when request does not match schema", () => {
+    it("should throw bad request error when request does not match schema", () => {
       expect(() =>
         validateRequest(
           { firstName: "name" },
@@ -165,44 +165,22 @@ describe("Express Utils", () => {
   });
 
   describe("jsonRequestHandler", () => {
-    it("should return a JSON request handler that sends an internal server error response", async () => {
+    it("should forward error to error middleware", async () => {
+      const error = ApplicationError.badRequest();
+
       const handler = jsonRequestHandler(serviceContainer, async () => {
-        throw new Error("Unexpected error.");
+        throw error;
       });
 
-      await handler(request, response, () => {});
+      const next = jest.fn();
 
-      expect(response.header).toHaveBeenCalledWith(
-        "Content-Type",
-        "application/json; charset=utf-8"
-      );
-      expect(response.status).toHaveBeenCalledWith(
-        HttpStatusCode.InternalServerError
-      );
-      expect(response.json).toHaveBeenCalledWith(
-        errorResponse(ApplicationError.internalServerError())
-      );
+      await handler(request, response, next);
+
+      expect(next).toHaveBeenCalledWith(error);
     });
 
-    it("should return a JSON request handler that sends a bad request error response", async () => {
-      const handler = jsonRequestHandler(serviceContainer, async () => {
-        throw ApplicationError.badRequest();
-      });
-
-      await handler(request, response, () => {});
-
-      expect(response.header).toHaveBeenCalledWith(
-        "Content-Type",
-        "application/json; charset=utf-8"
-      );
-      expect(response.status).toHaveBeenCalledWith(HttpStatusCode.BadRequest);
-      expect(response.json).toHaveBeenCalledWith(
-        errorResponse(ApplicationError.badRequest())
-      );
-    });
-
-    it("should return a JSON request handler that sends a success response", async () => {
-      const handlerResponse = { message: "Success" };
+    it("should send success response", async () => {
+      const handlerResponse = { message: "success" };
 
       const handler = jsonRequestHandler(
         serviceContainer,
@@ -215,6 +193,11 @@ describe("Express Utils", () => {
         "Content-Type",
         "application/json; charset=utf-8"
       );
+      expect(response.header).toHaveBeenCalledWith("Cache-Control", "no-cache");
+      expect(response.header).toHaveBeenCalledWith(
+        "Access-Control-Expose-Headers",
+        "Authorization"
+      );
       expect(response.json).toHaveBeenCalledWith(
         successResponse(handlerResponse)
       );
@@ -222,43 +205,40 @@ describe("Express Utils", () => {
   });
 
   describe("sseRequestHandler", () => {
-    it("should return an SSE request handler that sends an internal server error event", async () => {
-      const errorEvent: ServerSentEvent<"error", ApplicationError> = {
-        event: "error",
-        data: ApplicationError.internalServerError(),
-        isDone: true,
-      };
+    it("should forward error to error middleware when stream has not started", async () => {
+      const error = ApplicationError.badRequest();
 
       const handler = sseRequestHandler(serviceContainer, async () => {
-        throw new Error("Unexpected error.");
+        throw error;
       });
 
-      await handler(request, response, () => {});
+      const next = jest.fn();
 
-      expect(response.header).toHaveBeenCalledWith(
-        "Content-Type",
-        "text/event-stream; charset=utf-8"
-      );
-      expect(response.header).toHaveBeenCalledWith("Cache-Control", "no-cache");
-      expect(response.header).toHaveBeenCalledWith("Connection", "keep-alive");
-      expect(response.write).toHaveBeenCalledWith(
-        `data: ${JSON.stringify(errorEvent)}\n\n`
-      );
-      expect(response.end).toHaveBeenCalled();
+      await handler(request, response, next);
+
+      expect(next).toHaveBeenCalledWith(error);
     });
 
-    it("should return an SSE request handler that sends a bad request error event", async () => {
+    it("should send error event when stream has started", async () => {
+      const error = ApplicationError.badRequest();
+
+      const startEvent: ServerSentEvent = { event: "start" };
+
       const errorEvent: ServerSentEvent<"error", ApplicationError> = {
         event: "error",
-        data: ApplicationError.badRequest(),
-        isDone: true,
+        error: error,
       };
 
-      const handler = sseRequestHandler(serviceContainer, async () => {
-        throw ApplicationError.badRequest();
-      });
+      const handler = sseRequestHandler(
+        serviceContainer,
+        async (req, res, next, onSendEvent) => {
+          onSendEvent({ event: "start" });
 
-      await handler(request, response, () => {});
+          throw error;
+        }
+      );
+
+      await handler(request, response, jest.fn());
 
       expect(response.header).toHaveBeenCalledWith(
         "Content-Type",
@@ -266,68 +246,80 @@ describe("Express Utils", () => {
       );
       expect(response.header).toHaveBeenCalledWith("Cache-Control", "no-cache");
       expect(response.header).toHaveBeenCalledWith("Connection", "keep-alive");
-      expect(response.write).toHaveBeenCalledWith(
-        `data: ${JSON.stringify(errorEvent)}\n\n`
-      );
-      expect(response.end).toHaveBeenCalled();
-    });
-
-    it("should return an SSE request handler that sends events correctly", async () => {
-      const messageId = randomUUID();
-      const startEvent: ServerSentEvent<"start", { messageId: string }> = {
-        event: "start",
-        data: { messageId },
-        isDone: false,
-      };
-      const firstDeltaEvent: ServerSentEvent<
-        "delta",
-        { messageId: string; delta: string }
-      > = {
-        event: "delta",
-        data: { messageId, delta: "Hello" },
-        isDone: false,
-      };
-      const secondDeltaEvent: ServerSentEvent<
-        "delta",
-        { messageId: string; delta: string }
-      > = {
-        event: "delta",
-        data: { messageId, delta: "there!" },
-        isDone: false,
-      };
-      const endEvent: ServerSentEvent<"end", { messageId: string }> = {
-        event: "end",
-        data: { messageId },
-        isDone: false,
-      };
-
-      const handler = sseRequestHandler(serviceContainer, async (req, res) => {
-        res.write(`data: ${JSON.stringify(startEvent)}\n\n`);
-        res.write(`data: ${JSON.stringify(firstDeltaEvent)}\n\n`);
-        res.write(`data: ${JSON.stringify(secondDeltaEvent)}\n\n`);
-        res.write(`data: ${JSON.stringify(endEvent)}\n\n`);
-      });
-
-      await handler(request, response, () => {});
-
       expect(response.header).toHaveBeenCalledWith(
-        "Content-Type",
-        "text/event-stream; charset=utf-8"
+        "Access-Control-Expose-Headers",
+        "Authorization"
       );
-      expect(response.header).toHaveBeenCalledWith("Cache-Control", "no-cache");
-      expect(response.header).toHaveBeenCalledWith("Connection", "keep-alive");
       expect(response.write).toHaveBeenCalledWith(
         `data: ${JSON.stringify(startEvent)}\n\n`
       );
       expect(response.write).toHaveBeenCalledWith(
-        `data: ${JSON.stringify(firstDeltaEvent)}\n\n`
+        `data: ${JSON.stringify(errorEvent)}\n\n`
       );
-      expect(response.write).toHaveBeenCalledWith(
-        `data: ${JSON.stringify(secondDeltaEvent)}\n\n`
+      expect(response.end).toHaveBeenCalled();
+    });
+
+    it("should send events correctly", async () => {
+      const messageId = randomUUID();
+      const textContentBlockId = randomUUID();
+
+      const events: SendMessageEvent[] = [
+        { event: "start" },
+        { event: "message-start", data: { type: "message-start", messageId } },
+        {
+          event: "text-start",
+          data: { type: "text-start", id: textContentBlockId, messageId },
+        },
+        {
+          event: "text-delta",
+          data: {
+            type: "text-delta",
+            id: textContentBlockId,
+            delta: "Hello there! How can I help you today?",
+            messageId,
+          },
+        },
+        {
+          event: "text-end",
+          data: { type: "text-end", id: textContentBlockId, messageId },
+        },
+        {
+          event: "message-end",
+          data: { type: "message-end", finishReason: "stop", messageId },
+        },
+        { event: "end" },
+      ];
+
+      const handler = sseRequestHandler(
+        serviceContainer,
+        async (req, res, next, onSendEvent) => {
+          for (const event of events) {
+            onSendEvent(event);
+
+            await PromiseUtils.sleep(10);
+          }
+        }
       );
-      expect(response.write).toHaveBeenCalledWith(
-        `data: ${JSON.stringify(endEvent)}\n\n`
+
+      await handler(request, response, () => {});
+
+      expect(response.header).toHaveBeenCalledWith(
+        "Content-Type",
+        "text/event-stream; charset=utf-8"
       );
+      expect(response.header).toHaveBeenCalledWith("Cache-Control", "no-cache");
+      expect(response.header).toHaveBeenCalledWith("Connection", "keep-alive");
+      expect(response.header).toHaveBeenCalledWith(
+        "Access-Control-Expose-Headers",
+        "Authorization"
+      );
+
+      for (const event of events) {
+        expect(response.write).toHaveBeenCalledWith(
+          `data: ${JSON.stringify(event)}\n\n`
+        );
+      }
+
       expect(response.end).toHaveBeenCalled();
     });
   });

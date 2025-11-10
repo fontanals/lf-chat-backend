@@ -1,17 +1,15 @@
 import { randomUUID } from "crypto";
+import { addDays } from "date-fns";
 import { Request, Response } from "express";
 import jsonwebtoken from "jsonwebtoken";
 import { config } from "../../../src/config";
 import { authMiddleware } from "../../../src/middlewares/auth";
 import { Session } from "../../../src/models/entities/session";
-import { mapUserToDto, User } from "../../../src/models/entities/user";
+import { User } from "../../../src/models/entities/user";
 import { IServiceProvider } from "../../../src/service-provider";
 import { AuthContext, IAuthService } from "../../../src/services/auth";
 import { refreshTokenCookieName } from "../../../src/utils/constants";
-import {
-  ApplicationErrorCode,
-  HttpStatusCode,
-} from "../../../src/utils/errors";
+import { ApplicationErrorCode } from "../../../src/utils/errors";
 
 describe("authMiddleware", () => {
   let services: jest.Mocked<IServiceProvider>;
@@ -21,15 +19,31 @@ describe("authMiddleware", () => {
 
   const user: User = {
     id: randomUUID(),
-    name: "user 1",
+    name: "User 1",
     email: "user1@example.com",
     password: "password",
-    displayName: "user",
-    customPreferences: null,
+    displayName: "User 1",
+    customPrompt: null,
+    createdAt: addDays(new Date(), -100),
+    updatedAt: addDays(new Date(), -100),
   };
-  const userDto = mapUserToDto(user);
-  const session: Session = { id: randomUUID(), userId: userDto.id };
-  const authContext: AuthContext = { session, user: userDto };
+
+  const session: Session = {
+    id: randomUUID(),
+    expiresAt: addDays(user.createdAt!, 7),
+    userId: user.id,
+    createdAt: user.createdAt!,
+  };
+
+  const authContext: AuthContext = {
+    session: {
+      id: session.id,
+      expiresAt: session.expiresAt.toISOString(),
+      userId: user.id,
+      createdAt: session.createdAt!.toISOString(),
+    },
+    user: { id: user.id, name: user.name, email: user.email },
+  };
 
   beforeEach(() => {
     authService = {
@@ -45,29 +59,26 @@ describe("authMiddleware", () => {
     request = {} as unknown as jest.Mocked<Request>;
 
     response = {
-      status: jest.fn().mockReturnThis(),
       setHeader: jest.fn().mockReturnThis(),
       cookie: jest.fn().mockReturnThis(),
-      json: jest.fn(),
     } as unknown as jest.Mocked<Response>;
   });
 
-  it("should send an unauthorized response when no access token and refresh token are provided", async () => {
+  it("should call next with unauthorized error when no access token and refresh token are provided", async () => {
     const middleware = authMiddleware(services);
 
     request.headers = {};
     request.cookies = {};
 
-    await middleware(request, response, () => {});
+    const next = jest.fn();
 
-    expect(response.status).toHaveBeenCalledWith(HttpStatusCode.Unauthorized);
-    expect(response.json).toHaveBeenCalledWith({
-      success: false,
-      error: expect.objectContaining({
-        statusCode: HttpStatusCode.Unauthorized,
+    await middleware(request, response, next);
+
+    expect(next).toHaveBeenCalledWith(
+      expect.objectContaining({
         code: ApplicationErrorCode.Unauthorized,
-      }),
-    });
+      })
+    );
   });
 
   it("should set request auth context and call next when access token is valid", async () => {
@@ -95,7 +106,7 @@ describe("authMiddleware", () => {
     expect(next).toHaveBeenCalled();
   });
 
-  it("should send an unauthorized response when no access token is provided and refresh token is invalid", async () => {
+  it("should call next with unauthorized error when no access token is provided and refresh token is invalid", async () => {
     const middleware = authMiddleware(services);
 
     request.headers = {};
@@ -103,16 +114,15 @@ describe("authMiddleware", () => {
 
     authService.refreshToken.mockResolvedValue({ isValid: false });
 
-    await middleware(request, response, () => {});
+    const next = jest.fn();
 
-    expect(response.status).toHaveBeenCalledWith(HttpStatusCode.Unauthorized);
-    expect(response.json).toHaveBeenCalledWith({
-      success: false,
-      error: expect.objectContaining({
-        statusCode: HttpStatusCode.Unauthorized,
+    await middleware(request, response, next);
+
+    expect(next).toHaveBeenCalledWith(
+      expect.objectContaining({
         code: ApplicationErrorCode.Unauthorized,
-      }),
-    });
+      })
+    );
   });
 
   it("should refresh token setting new access token header and refresh token cookie, set request auth context and call next function", async () => {
@@ -132,6 +142,7 @@ describe("authMiddleware", () => {
       config.ACCESS_TOKEN_SECRET,
       { expiresIn: "15m" }
     );
+
     const newRefreshToken = jsonwebtoken.sign(
       authContext,
       config.REFRESH_TOKEN_SECRET,

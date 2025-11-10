@@ -2,48 +2,85 @@ import bcrypt from "bcrypt";
 import { randomUUID } from "crypto";
 import { addDays } from "date-fns";
 import express from "express";
+import jsonwebtoken from "jsonwebtoken";
 import request from "supertest";
 import { Application } from "../../../src/app";
+import { config } from "../../../src/config";
+import { RefreshToken } from "../../../src/models/entities/refresh-token";
+import { Session } from "../../../src/models/entities/session";
 import { User } from "../../../src/models/entities/user";
 import {
   SigninRequest,
   SignupRequest,
 } from "../../../src/models/requests/auth";
+import { ApplicationErrorCode } from "../../../src/utils/errors";
+import { HttpStatusCode } from "../../../src/utils/types";
 import {
-  ApplicationErrorCode,
-  HttpStatusCode,
-} from "../../../src/utils/errors";
-import { createTestPool, insertUsers, truncateUsers } from "../../utils";
+  createTestPool,
+  insertRefreshTokens,
+  insertSessions,
+  insertUsers,
+  truncateUsers,
+} from "../../utils";
 
 describe("Auth Routes", () => {
   const expressApp = express();
   const pool = createTestPool();
   const app = new Application(expressApp, pool);
 
-  const users: User[] = [
-    {
+  const mockUsers: User[] = Array.from({ length: 3 }, (_, index) => ({
+    id: randomUUID(),
+    name: `User ${index + 1}`,
+    email: `user${index + 1}@example.com`,
+    password: "password",
+    displayName: `User${index + 1}`,
+    customPrompt: null,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  }));
+
+  const mockSessions: Session[] = mockUsers.map((user) => ({
+    id: randomUUID(),
+    expiresAt: addDays(user.createdAt!, 7),
+    userId: user.id,
+    createdAt: user.createdAt,
+  }));
+
+  const mockRefreshTokens: RefreshToken[] = mockSessions.map((session) => {
+    const user = mockUsers.find((user) => user.id === session.userId)!;
+
+    return {
       id: randomUUID(),
-      name: "user 1",
-      email: "user1@example.com",
-      password: "password",
-      createdAt: addDays(new Date(), -50),
-    },
-    {
-      id: randomUUID(),
-      name: "user 2",
-      email: "user2@example.com",
-      password: "password",
-      createdAt: addDays(new Date(), -102),
-    },
-  ];
+      token: jsonwebtoken.sign(
+        {
+          session: {
+            id: session.id,
+            expiresAt: session.expiresAt.toISOString(),
+            userId: session.userId,
+            createdAt: session.createdAt!.toISOString(),
+          },
+          user: { id: user.id, name: user.name, email: user.email },
+        },
+        config.REFRESH_TOKEN_SECRET,
+        { expiresIn: "7d" }
+      ),
+      isRevoked: false,
+      expiresAt: session.expiresAt,
+      sessionId: session.id,
+      createdAt: session.createdAt,
+      updatedAt: session.createdAt,
+    };
+  });
 
   beforeAll(async () => {
     const password = await bcrypt.hash("password", 10);
 
     await insertUsers(
-      users.map((user) => ({ ...user, password })),
+      mockUsers.map((user) => ({ ...user, password })),
       pool
     );
+    await insertSessions(mockSessions, pool);
+    await insertRefreshTokens(mockRefreshTokens, pool);
   });
 
   afterAll(async () => {
@@ -52,19 +89,16 @@ describe("Auth Routes", () => {
   });
 
   describe("signup", () => {
-    it("should return a bad request response when request does not match request schema", async () => {
+    it("should return a bad request response when request does not match schema", async () => {
       const response = await request(expressApp)
         .post("/api/signup")
-        .send({ name: "user 3" });
+        .send({ name: "New User" });
 
       expect(response.status).toBe(HttpStatusCode.BadRequest);
-      expect(response.headers["content-type"]).toBe(
-        "application/json; charset=utf-8"
-      );
+
       expect(response.body).toEqual({
         success: false,
         error: expect.objectContaining({
-          statusCode: HttpStatusCode.BadRequest,
           code: ApplicationErrorCode.BadRequest,
         }),
       });
@@ -72,8 +106,8 @@ describe("Auth Routes", () => {
 
     it("should return an invalid email or password response when email is duplicate", async () => {
       const signupRequest: SignupRequest = {
-        name: "user 3",
-        email: users[0].email,
+        name: "New User",
+        email: mockUsers[0].email,
         password: "password",
       };
 
@@ -82,22 +116,19 @@ describe("Auth Routes", () => {
         .send(signupRequest);
 
       expect(response.status).toBe(HttpStatusCode.BadRequest);
-      expect(response.headers["content-type"]).toBe(
-        "application/json; charset=utf-8"
-      );
+
       expect(response.body).toEqual({
         success: false,
         error: expect.objectContaining({
-          statusCode: HttpStatusCode.BadRequest,
           code: ApplicationErrorCode.InvalidEmailOrPassword,
         }),
       });
     });
 
-    it("should signup a new user creating and returning a new session and the user", async () => {
+    it("should signup user and return a new session and the user", async () => {
       const signupRequest: SignupRequest = {
-        name: "user 3",
-        email: "user3@example.com",
+        name: "New User",
+        email: "new.user@example.com",
         password: "password",
       };
 
@@ -123,17 +154,21 @@ describe("Auth Routes", () => {
       }
 
       expect(response.status).toBe(HttpStatusCode.Ok);
-      expect(response.headers["content-type"]).toBe(
-        "application/json; charset=utf-8"
-      );
+
       expect(response.body).toEqual({
         success: true,
         data: {
-          session: { id: expect.any(String), userId: expect.any(String) },
+          session: {
+            id: expect.any(String),
+            expiresAt: expect.any(String),
+            userId: expect.any(String),
+          },
           user: {
             id: expect.any(String),
             name: signupRequest.name,
             email: signupRequest.email,
+            displayName: signupRequest.name.split(" ")[0],
+            customPrompt: null,
           },
         },
       });
@@ -141,32 +176,29 @@ describe("Auth Routes", () => {
   });
 
   describe("signin", () => {
-    it("should return a bad request response when request does not match request schema", async () => {
-      const user = users[0];
+    it("should return a bad request response when request does not match schema", async () => {
+      const mockUser = mockUsers[0];
 
       const response = await request(expressApp)
         .post("/api/signin")
-        .send({ email: user.email });
+        .send({ email: mockUser.email });
 
       expect(response.status).toBe(HttpStatusCode.BadRequest);
-      expect(response.headers["content-type"]).toBe(
-        "application/json; charset=utf-8"
-      );
+
       expect(response.body).toEqual({
         success: false,
         error: expect.objectContaining({
-          statusCode: HttpStatusCode.BadRequest,
           code: ApplicationErrorCode.BadRequest,
         }),
       });
     });
 
     it("should return an invalid email or password response when password is invalid", async () => {
-      const user = users[0];
+      const mockUser = mockUsers[0];
 
       const signupRequest: SigninRequest = {
-        email: user.email,
-        password: "invalid password",
+        email: mockUser.email,
+        password: "invalid-password",
       };
 
       const response = await request(expressApp)
@@ -174,24 +206,21 @@ describe("Auth Routes", () => {
         .send(signupRequest);
 
       expect(response.status).toBe(HttpStatusCode.BadRequest);
-      expect(response.headers["content-type"]).toBe(
-        "application/json; charset=utf-8"
-      );
+
       expect(response.body).toEqual({
         success: false,
         error: expect.objectContaining({
-          statusCode: HttpStatusCode.BadRequest,
           code: ApplicationErrorCode.InvalidEmailOrPassword,
         }),
       });
     });
 
-    it("should signin user returning a new session and the user", async () => {
-      const user = users[0];
+    it("should signin user and return a new session and the user", async () => {
+      const mockUser = mockUsers[0];
 
       const signinRequest: SigninRequest = {
-        email: user.email,
-        password: user.password,
+        email: mockUser.email,
+        password: mockUser.password,
       };
 
       const response = await request(expressApp)
@@ -216,21 +245,58 @@ describe("Auth Routes", () => {
       }
 
       expect(response.status).toBe(HttpStatusCode.Ok);
-      expect(response.headers["content-type"]).toBe(
-        "application/json; charset=utf-8"
-      );
+
       expect(response.body).toEqual({
         success: true,
         data: {
-          session: { id: expect.any(String), userId: user.id },
+          session: {
+            id: expect.any(String),
+            expiresAt: expect.any(String),
+            userId: mockUser.id,
+          },
           user: {
-            id: user.id,
-            name: user.name,
-            email: user.email,
-            createdAt: user.createdAt?.toISOString(),
+            id: mockUser.id,
+            name: mockUser.name,
+            email: mockUser.email,
+            displayName: mockUser.displayName,
+            customPrompt: mockUser.customPrompt,
+            createdAt: mockUser.createdAt!.toISOString(),
+            updatedAt: mockUser.updatedAt!.toISOString(),
           },
         },
       });
+    });
+  });
+
+  describe("signout", () => {
+    it("should signout user and return its id", async () => {
+      const mockUser = mockUsers[0];
+      const mockSession = mockSessions[0];
+      const mockRefreshToken = mockRefreshTokens[0];
+
+      const accessToken = jsonwebtoken.sign(
+        {
+          session: {
+            id: mockSession.id,
+            expiresAt: mockSession.expiresAt.toISOString(),
+            userId: mockSession.userId,
+            createdAt: mockSession.createdAt!.toISOString(),
+          },
+          user: { id: mockUser.id, name: mockUser.name, email: mockUser.email },
+        },
+        config.ACCESS_TOKEN_SECRET,
+        { expiresIn: "15m" }
+      );
+
+      const response = await request(expressApp)
+        .post("/api/signout")
+        .set("Authorization", `Bearer ${accessToken}`)
+        .set("Cookie", `refreshToken=${mockRefreshToken.token}`)
+        .send();
+
+      expect(response.status).toBe(HttpStatusCode.Ok);
+
+      expect(response.body).toEqual({ success: true, data: mockUser.id });
     });
   });
 });

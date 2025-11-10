@@ -1,27 +1,30 @@
 import { randomUUID } from "crypto";
 import { IDataContext } from "../../../src/data/data-context";
 import { Chat } from "../../../src/models/entities/chat";
-import { Message } from "../../../src/models/entities/message";
+import { Project } from "../../../src/models/entities/project";
 import { ChatRepository } from "../../../src/repositories/chat";
 
 describe("ChatRepository", () => {
   let dataContext: jest.Mocked<IDataContext>;
   let chatRepository: ChatRepository;
 
-  let messageNumber = 0;
-  const mockChats: Chat[] = Array.from({ length: 5 }, (_, index) => ({
+  const mockProjects: Project[] = Array.from({ length: 3 }, (_, index) => ({
     id: randomUUID(),
-    title: `chat ${index + 1}`,
+    title: `Project ${index + 1}`,
+    description: `Project ${index + 1} Description`,
     userId: randomUUID(),
+    createdAt: new Date(),
+    updatedAt: new Date(),
   }));
-  const mockMessages: Message[] = mockChats.flatMap((chat) =>
-    Array.from({ length: 4 }, (_, index) => ({
-      id: randomUUID(),
-      role: index % 2 === 0 ? "user" : "assistant",
-      content: `message ${++messageNumber}`,
-      chatId: chat.id,
-    }))
-  );
+
+  const mockChats: Chat[] = Array.from({ length: 10 }, (_, index) => ({
+    id: randomUUID(),
+    title: `Chat ${index + 1}`,
+    projectId: mockProjects[index]?.id ?? null,
+    userId: randomUUID(),
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  }));
 
   beforeEach(() => {
     dataContext = {
@@ -69,7 +72,10 @@ describe("ChatRepository", () => {
         rows: mockChats.map((chat) => ({
           chatId: chat.id,
           chatTitle: chat.title,
+          chatProjectId: chat.projectId,
           chatUserId: chat.userId,
+          chatCreatedAt: chat.createdAt,
+          chatUpdatedAt: chat.updatedAt,
         })),
       });
 
@@ -78,33 +84,50 @@ describe("ChatRepository", () => {
       expect(chats).toEqual(mockChats);
     });
 
-    it("should return chats including messages", async () => {
+    it("should return chats including project", async () => {
       dataContext.query.mockResolvedValue({
-        rows: mockChats.flatMap((chat) => {
-          const messages = mockMessages.filter(
-            (message) => message.chatId === chat.id
-          );
+        rows: mockChats.map((chat) => {
+          if (chat.projectId != null) {
+            const project = mockProjects.find(
+              (project) => project.id === chat.projectId
+            );
 
-          return messages.map((message) => ({
+            return {
+              chatId: chat.id,
+              chatTitle: chat.title,
+              chatProjectId: chat.projectId,
+              chatUserId: chat.userId,
+              chatCreatedAt: chat.createdAt,
+              chatUpdatedAt: chat.updatedAt,
+              projectId: project?.id,
+              projectTitle: project?.title,
+              projectDescription: project?.description,
+              projectUserId: project?.userId,
+              projectCreatedAt: project?.createdAt,
+              projectUpdatedAt: project?.updatedAt,
+            };
+          }
+
+          return {
             chatId: chat.id,
             chatTitle: chat.title,
+            chatProjectId: chat.projectId,
             chatUserId: chat.userId,
-            messageId: message.id,
-            messageRole: message.role,
-            messageContent: message.content,
-            messageChatId: message.chatId,
-          }));
+            chatCreatedAt: chat.createdAt,
+            chatUpdatedAt: chat.updatedAt,
+          };
         }),
       });
 
-      const chats = await chatRepository.findAll({ includeMessages: true });
+      const chats = await chatRepository.findAll({ includeProject: true });
 
       expect(chats).toEqual(
         mockChats.map((chat) => ({
           ...chat,
-          messages: mockMessages.filter(
-            (message) => message.chatId === chat.id
-          ),
+          project:
+            chat.projectId != null
+              ? mockProjects.find((project) => project.id === chat.projectId)
+              : null,
         }))
       );
     });
@@ -123,60 +146,89 @@ describe("ChatRepository", () => {
     });
 
     it("should return chats paginated", async () => {
+      const cursor = new Date();
+      const limit = 5;
+
       dataContext.query.mockResolvedValue({
-        rows: mockChats.map((chat) => ({
+        rows: mockChats.slice(0, limit + 1).map((chat) => ({
           chatId: chat.id,
           chatTitle: chat.title,
+          chatProjectId: chat.projectId,
           chatUserId: chat.userId,
+          chatCreatedAt: chat.createdAt,
+          chatUpdatedAt: chat.updatedAt,
           totalItems: mockChats.length,
         })),
       });
 
       const paginatedChats = await chatRepository.findAllPaginated(
-        new Date(),
-        20
+        cursor,
+        limit
       );
 
       expect(paginatedChats).toEqual({
-        items: mockChats,
+        items: mockChats.slice(0, limit),
         totalItems: mockChats.length,
+        nextCursor: mockChats[limit]?.createdAt,
       });
     });
 
-    it("should return chats paginated including messages", async () => {
-      dataContext.query.mockResolvedValue({
-        rows: mockChats.flatMap((chat) => {
-          const messages = mockMessages.filter(
-            (message) => message.chatId === chat.id
-          );
+    it("should return chats paginated including project", async () => {
+      const cursor = new Date();
+      const limit = 5;
 
-          return messages.map((message) => ({
+      dataContext.query.mockResolvedValue({
+        rows: mockChats.slice(0, limit + 1).map((chat) => {
+          if (chat.projectId != null) {
+            const project = mockProjects.find(
+              (project) => project.id === chat.projectId
+            );
+
+            return {
+              chatId: chat.id,
+              chatTitle: chat.title,
+              chatProjectId: chat.projectId,
+              chatUserId: chat.userId,
+              chatCreatedAt: chat.createdAt,
+              chatUpdatedAt: chat.updatedAt,
+              projectId: project?.id,
+              projectTitle: project?.title,
+              projectDescription: project?.description,
+              projectUserId: project?.userId,
+              projectCreatedAt: project?.createdAt,
+              projectUpdatedAt: project?.updatedAt,
+              totalItems: mockChats.length,
+            };
+          }
+
+          return {
             chatId: chat.id,
             chatTitle: chat.title,
+            chatProjectId: chat.projectId,
             chatUserId: chat.userId,
-            messageId: message.id,
-            messageRole: message.role,
-            messageContent: message.content,
-            messageChatId: message.chatId,
+            chatCreatedAt: chat.createdAt,
+            chatUpdatedAt: chat.updatedAt,
             totalItems: mockChats.length,
-          }));
+          };
         }),
       });
 
       const paginatedChats = await chatRepository.findAllPaginated(
-        new Date(),
-        20,
-        { includeMessages: true }
+        cursor,
+        limit,
+        { includeProject: true }
       );
 
       expect(paginatedChats).toEqual({
-        items: mockChats.map((chat) => ({
+        items: mockChats.slice(0, limit).map((chat) => ({
           ...chat,
-          messages: mockMessages.filter(
-            (message) => message.chatId === chat.id
-          ),
+          project:
+            chat.projectId != null
+              ? mockProjects.find((project) => project.id === chat.projectId)
+              : null,
         })),
         totalItems: mockChats.length,
+        nextCursor: mockChats[limit]?.createdAt,
       });
     });
   });
@@ -198,7 +250,10 @@ describe("ChatRepository", () => {
           {
             chatId: mockChat.id,
             chatTitle: mockChat.title,
+            chatProjectId: mockChat.projectId,
             chatUserId: mockChat.userId,
+            chatCreatedAt: mockChat.createdAt,
+            chatUpdatedAt: mockChat.updatedAt,
           },
         ],
       });
@@ -208,31 +263,34 @@ describe("ChatRepository", () => {
       expect(chat).toEqual(mockChat);
     });
 
-    it("should return chat including messages", async () => {
-      const mockChat = mockChats[0];
+    it("should return chat including project", async () => {
+      const mockChat = mockChats.find((chat) => chat.projectId != null)!;
+      const mockProject = mockProjects.find(
+        (project) => project.id === mockChat.projectId
+      )!;
 
       dataContext.query.mockResolvedValue({
-        rows: mockMessages
-          .filter((message) => message.chatId === mockChat.id)
-          .map((message) => ({
+        rows: [
+          {
             chatId: mockChat.id,
             chatTitle: mockChat.title,
+            chatProjectId: mockChat.projectId,
             chatUserId: mockChat.userId,
-            messageId: message.id,
-            messageRole: message.role,
-            messageContent: message.content,
-            messageChatId: message.chatId,
-          })),
+            chatCreatedAt: mockChat.createdAt,
+            chatUpdatedAt: mockChat.updatedAt,
+            projectId: mockProject.id,
+            projectTitle: mockProject.title,
+            projectDescription: mockProject.description,
+            projectUserId: mockProject.userId,
+            projectCreatedAt: mockProject.createdAt,
+            projectUpdatedAt: mockProject.updatedAt,
+          },
+        ],
       });
 
-      const chat = await chatRepository.findOne({ includeMessages: true });
+      const chat = await chatRepository.findOne({ includeProject: true });
 
-      expect(chat).toEqual({
-        ...mockChat,
-        messages: mockMessages.filter(
-          (message) => message.chatId === mockChat.id
-        ),
-      });
+      expect(chat).toEqual({ ...mockChat, project: mockProject });
     });
   });
 });

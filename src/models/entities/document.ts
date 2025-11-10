@@ -9,5 +9,5 @@ export type Document = {
   projectId?: string | null;
   userId: string;
   createdAt?: Date;
-  udpatedAt?: Date;
+  updatedAt?: Date;
 };

@@ -29,6 +29,7 @@ import { ChatService, IChatService } from "./services/chat";
 import { DocumentService, IDocumentService } from "./services/document";
 import { IProjectService, ProjectService } from "./services/project";
 import { IUserService, UserService } from "./services/user";
+import { MockAssistantService } from "./services/assistant-mock";
 
 type ServiceMap = {
   DataContext: IDataContext;
@@ -42,9 +43,10 @@ type ServiceMap = {
   DocumentRepository: IDocumentRepository;
   DocumentChunkRepository: IDocumentChunkRepository;
   OpenAiModelUsageRepository: IOpenAiModelUsageRepository;
-  AssistantService: IAssistantService;
   AuthService: IAuthService;
   UserService: IUserService;
+  MockAssistantService: MockAssistantService;
+  AssistantService: IAssistantService;
   ProjectService: IProjectService;
   ChatService: IChatService;
   DocumentService: IDocumentService;
@@ -216,8 +218,15 @@ export function registerServices(services: ServiceContainer, pool: Pool) {
     factory: (services) =>
       new UserService(
         services.get("DataContext"),
-        services.get("UserRepository")
+        services.get("FileStorage"),
+        services.get("UserRepository"),
+        services.get("DocumentRepository")
       ),
+  });
+
+  services.register({
+    identifier: "MockAssistantService",
+    factory: () => new MockAssistantService(),
   });
 
   services.register({
@@ -228,7 +237,18 @@ export function registerServices(services: ServiceContainer, pool: Pool) {
         services.get("DocumentRepository"),
         services.get("DocumentChunkRepository"),
         services.get("OpenAiModelUsageRepository"),
+        services.get("MockAssistantService"),
         aiService
+      ),
+  });
+
+  services.register({
+    identifier: "ProjectService",
+    factory: (services) =>
+      new ProjectService(
+        services.get("DataContext"),
+        services.get("FileStorage"),
+        services.get("ProjectRepository")
       ),
   });
 
@@ -244,17 +264,6 @@ export function registerServices(services: ServiceContainer, pool: Pool) {
         services.get("MessageRepository"),
         services.get("DocumentRepository"),
         services.get("AssistantService")
-      ),
-  });
-
-  services.register({
-    identifier: "ProjectService",
-    factory: (services) =>
-      new ProjectService(
-        services.get("DataContext"),
-        services.get("FileStorage"),
-        services.get("ProjectRepository"),
-        services.get("DocumentRepository")
       ),
   });
 

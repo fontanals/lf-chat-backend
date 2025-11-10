@@ -7,13 +7,15 @@ describe("UserRepository", () => {
   let dataContext: jest.Mocked<IDataContext>;
   let userRepository: UserRepository;
 
-  const mockUsers: User[] = Array.from({ length: 5 }, (_, index) => ({
+  const mockUsers: User[] = Array.from({ length: 10 }, (_, index) => ({
     id: randomUUID(),
-    name: `user ${index + 1}`,
+    name: `User ${index + 1}`,
     email: `user${index + 1}@example.com`,
     password: "password",
-    displayName: "user",
-    customPreferences: null,
+    displayName: `User ${index + 1}`,
+    customPrompt: null,
+    createdAt: new Date(),
+    updatedAt: new Date(),
   }));
 
   beforeEach(() => {
@@ -26,6 +28,24 @@ describe("UserRepository", () => {
     };
 
     userRepository = new UserRepository(dataContext);
+  });
+
+  describe("count", () => {
+    it("should return 0 when no users are found", async () => {
+      dataContext.query.mockResolvedValue({ rows: [{ count: "0" }] });
+
+      const count = await userRepository.count();
+
+      expect(count).toBe(0);
+    });
+
+    it("should return the correct user count", async () => {
+      dataContext.query.mockResolvedValue({ rows: [{ count: "5" }] });
+
+      const count = await userRepository.count();
+
+      expect(count).toBe(5);
+    });
   });
 
   describe("exists", () => {

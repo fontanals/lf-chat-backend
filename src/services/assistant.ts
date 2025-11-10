@@ -15,8 +15,8 @@ import {
   MessagePart,
   ProcessDocumentToolInput,
   ProcessDocumentToolOutput,
-  SearchDocumentToolInput,
-  SearchDocumentToolOutput,
+  ReadDocumentToolInput,
+  ReadDocumentToolOutput,
   ToolCallContentBlock,
   ToolName,
   UserMessage,
@@ -39,12 +39,12 @@ export type AssistantMode = "open-ai" | "mock";
 
 export type SendMessageOptions = {
   previousMessages: Message[];
-  message: UserMessage;
+  userMessage: UserMessage;
   userCustomPrompt?: string | null;
   project?: Project | null;
   documents?: Document[];
   onMessagePart: (messagePart: MessagePart) => void;
-  abortSignal: AbortSignal;
+  abortSignal?: AbortSignal;
 };
 
 export interface IAssistantService {
@@ -58,22 +58,23 @@ export class AssistantService implements IAssistantService {
   private readonly documentRepository: IDocumentRepository;
   private readonly documentChunkRepository: IDocumentChunkRepository;
   private readonly openAiModelUsageRepository: IOpenAiModelUsageRepository;
-  private readonly aiService: AiService;
   private readonly mockAssistantService: MockAssistantService;
+  private readonly aiService: AiService;
 
   constructor(
     fileStorage: IFileStorage,
     documentRepository: IDocumentRepository,
     documentChunkRepository: IDocumentChunkRepository,
     openAiModelUsageRepository: IOpenAiModelUsageRepository,
+    mockAssistantService: MockAssistantService,
     aiService: AiService
   ) {
     this.fileStorage = fileStorage;
     this.documentRepository = documentRepository;
     this.documentChunkRepository = documentChunkRepository;
     this.openAiModelUsageRepository = openAiModelUsageRepository;
+    this.mockAssistantService = mockAssistantService;
     this.aiService = aiService;
-    this.mockAssistantService = new MockAssistantService();
   }
 
   async getMode(): Promise<AssistantMode> {
@@ -150,8 +151,8 @@ If the conversation is a question, phrase the title as a topic rather than a ful
       content: [],
       feedback: null,
       finishReason: "stop",
-      parentMessageId: options.message.id,
-      chatId: options.message.chatId,
+      parentMessageId: options.userMessage.id,
+      chatId: options.userMessage.chatId,
     };
 
     let error: string | null = null;
@@ -160,7 +161,7 @@ If the conversation is a question, phrase the title as a topic rather than a ful
       options.onMessagePart({ type: "message-start", messageId: response.id });
 
       if (
-        options.message.content.some(
+        options.userMessage.content.some(
           (contentBlock) =>
             contentBlock.type === "text" &&
             !StringUtils.isNullOrWhitespace(contentBlock.text)
@@ -168,7 +169,7 @@ If the conversation is a question, phrase the title as a topic rather than a ful
       ) {
         const moderation = await this.aiService.createModeration({
           model: "omni-moderation-latest",
-          input: options.message.content
+          input: options.userMessage.content
             .filter((contentBlock) => contentBlock.type === "text")
             .map((contentBlock) => contentBlock.text)
             .join("\n"),
@@ -278,12 +279,12 @@ If the conversation is a question, phrase the title as a topic rather than a ful
             if (
               contentBlock != null &&
               contentBlock.type === "tool-call" &&
-              contentBlock.name === "searchDocument"
+              contentBlock.name === "readDocument"
             ) {
               options.onMessagePart({
                 type: "tool-call-delta",
                 id: part.id,
-                name: "searchDocument",
+                name: "readDocument",
                 delta: part.delta,
                 messageId: response.id,
               });
@@ -313,16 +314,16 @@ If the conversation is a question, phrase the title as a topic rather than a ful
             if (
               contentBlock != null &&
               contentBlock.type === "tool-call" &&
-              contentBlock.name === "searchDocument"
+              contentBlock.name === "readDocument"
             ) {
-              contentBlock.input = part.input as SearchDocumentToolInput;
+              contentBlock.input = part.input as ReadDocumentToolInput;
 
               options.onMessagePart({
                 type: "tool-call",
                 messageId: response.id,
                 id: part.toolCallId,
-                name: "searchDocument",
-                input: part.input as SearchDocumentToolInput,
+                name: "readDocument",
+                input: part.input as ReadDocumentToolInput,
               });
             }
 
@@ -361,26 +362,26 @@ If the conversation is a question, phrase the title as a topic rather than a ful
             if (
               contentBlock != null &&
               contentBlock.type === "tool-call" &&
-              contentBlock.name === "searchDocument"
+              contentBlock.name === "readDocument"
             ) {
-              contentBlock.input = part.input as SearchDocumentToolInput;
-              contentBlock.output = part.output as SearchDocumentToolOutput;
+              contentBlock.input = part.input as ReadDocumentToolInput;
+              contentBlock.output = part.output as ReadDocumentToolOutput;
 
               response.content.push(contentBlock);
 
               options.onMessagePart({
                 type: "tool-call-result",
                 id: part.toolCallId,
-                name: "searchDocument",
-                input: part.input as SearchDocumentToolInput,
-                output: part.output as SearchDocumentToolOutput,
+                name: "readDocument",
+                input: part.input as ReadDocumentToolInput,
+                output: part.output as ReadDocumentToolOutput,
                 messageId: response.id,
               });
 
               options.onMessagePart({
                 type: "tool-call-end",
                 id: part.toolCallId,
-                name: "searchDocument",
+                name: "readDocument",
                 messageId: response.id,
               });
             }
@@ -459,8 +460,8 @@ ${options.documents
 When the user references these documents or asks questions about them:
 1. **Check processing status first**: 
    - If a document shows "NOT PROCESSED", you MUST use the 'processDocument' tool before you can search it
-   - If a document shows "PROCESSED", you can directly use 'searchDocument' on it
-2. Use the 'searchDocument' tool to find relevant information within processed documents
+   - If a document shows "PROCESSED", you can directly use 'readDocument' on it
+2. Use the 'readDocument' tool to find relevant information within processed documents
 3. Always cite which document you're referencing when providing information
 4. Be transparent about what comes from the documents versus your general knowledge
 
@@ -510,7 +511,7 @@ You have access to these tools:
 - Only use this on documents marked as "NOT PROCESSED"
 - After processing, the document becomes searchable
 
-**searchDocument**: Finds specific information within a processed document using semantic search
+**readDocument**: Finds specific information within a processed document using semantic search
 - Input: { documentId: string, query: string }
 - Only works on documents marked as "PROCESSED ✓"
 - Use targeted, specific queries for best results
@@ -530,7 +531,7 @@ Use these tools proactively when users ask about uploaded documents.
 
   getModelMessages(options: SendMessageOptions) {
     const modelMessages: ModelMessage[] = options.previousMessages
-      .concat(options.message)
+      .concat(options.userMessage)
       .flatMap((message) => {
         if (message.role === "user") {
           return [
@@ -627,12 +628,12 @@ Use these tools proactively when users ask about uploaded documents.
         execute: (input) =>
           this.processDocument(
             input,
-            options.message.chatId,
+            options.userMessage.chatId,
             openAiModelUsageData
           ),
       }),
-      searchDocument: tool({
-        name: "searchDocument",
+      readDocument: tool({
+        name: "readDocument",
         description:
           "Searches the provided document for relevant information based on a string query. Returns document chunks in XML format.",
         inputSchema: z.object({
@@ -644,7 +645,7 @@ Use these tools proactively when users ask about uploaded documents.
           z.object({ success: z.literal(true), data: z.string() }),
           z.object({ success: z.literal(false), error: z.string() }),
         ]),
-        execute: (input) => this.searchDocument(input, openAiModelUsageData),
+        execute: (input) => this.readDocument(input, openAiModelUsageData),
       }),
     };
 
@@ -716,14 +717,16 @@ Use these tools proactively when users ask about uploaded documents.
 
       return { success: true, data: document.id };
     } catch (error) {
+      console.error("ERROR PROCESSING DOCUMENT: ", error);
+
       return { success: false, error: (error as Error).message };
     }
   }
 
-  async searchDocument(
-    input: SearchDocumentToolInput,
+  async readDocument(
+    input: ReadDocumentToolInput,
     openAiModelUsageData: OpenAiModelUsage[]
-  ): Promise<SearchDocumentToolOutput> {
+  ): Promise<ReadDocumentToolOutput> {
     try {
       const document = await this.documentRepository.findOne({ id: input.id });
 
@@ -735,23 +738,32 @@ Use these tools proactively when users ask about uploaded documents.
         throw new Error("Document is not processed yet.");
       }
 
-      const embeddingResult = await this.aiService.embed({
-        model: openai.textEmbeddingModel("text-embedding-3-small"),
-        value: input.query,
-      });
+      let documentChunks: DocumentChunk[];
 
-      openAiModelUsageData.push({
-        model: "text-embedding-3-small",
-        inputTokens: embeddingResult.usage.tokens ?? 0,
-        outputTokens: 0,
-        totalTokens: embeddingResult.usage.tokens ?? 0,
-      });
+      if (!StringUtils.isNullOrWhitespace(input.query)) {
+        const embeddingResult = await this.aiService.embed({
+          model: openai.textEmbeddingModel("text-embedding-3-small"),
+          value: input.query,
+        });
 
-      const documentChunks = await this.documentChunkRepository.findRelevant(
-        embeddingResult.embedding,
-        5,
-        { documentId: input.id }
-      );
+        openAiModelUsageData.push({
+          model: "text-embedding-3-small",
+          inputTokens: embeddingResult.usage.tokens ?? 0,
+          outputTokens: 0,
+          totalTokens: embeddingResult.usage.tokens ?? 0,
+        });
+
+        documentChunks = await this.documentChunkRepository.findRelevant(
+          embeddingResult.embedding,
+          5,
+          { documentId: input.id }
+        );
+      } else {
+        documentChunks = await this.documentChunkRepository.findAll({
+          documentId: input.id,
+          limit: 5,
+        });
+      }
 
       const data = documentChunks
         .map(

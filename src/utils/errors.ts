@@ -20,6 +20,9 @@ export class ApplicationError extends Error {
     switch (this.code) {
       case ApplicationErrorCode.InvalidEmailOrPassword:
         return ApplicationErrorCode.BadRequest;
+      case ApplicationErrorCode.MaxUsersReached:
+      case ApplicationErrorCode.MaxUserDocumentsReached:
+        return ApplicationErrorCode.InternalServerError;
       default:
         return this.code;
     }

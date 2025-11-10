@@ -8,7 +8,7 @@ export type MessageFinishReason =
   | "unknown"
   | "interrupted";
 
-export type ToolName = "processDocument" | "searchDocument";
+export type ToolName = "processDocument" | "readDocument";
 
 export type ToolResult<TData> =
   | { success: true; data: TData }
@@ -18,13 +18,13 @@ export type ProcessDocumentToolInput = { id: string; name: string };
 
 export type ProcessDocumentToolOutput = ToolResult<string>;
 
-export type SearchDocumentToolInput = {
+export type ReadDocumentToolInput = {
   id: string;
   name: string;
   query: string;
 };
 
-export type SearchDocumentToolOutput = ToolResult<string>;
+export type ReadDocumentToolOutput = ToolResult<string>;
 
 export type TextStartPart = {
   type: "text-start";
@@ -64,17 +64,17 @@ export type ProcessDocumentToolCallPart = {
   messageId: string;
 };
 
-export type SearchDocumentToolCallPart = {
+export type ReadDocumentToolCallPart = {
   type: "tool-call";
   id: string;
-  name: "searchDocument";
-  input: SearchDocumentToolInput;
+  name: "readDocument";
+  input: ReadDocumentToolInput;
   messageId: string;
 };
 
 export type ToolCallPart =
   | ProcessDocumentToolCallPart
-  | SearchDocumentToolCallPart;
+  | ReadDocumentToolCallPart;
 
 export type ProcessDocumentToolCallResultPart = {
   type: "tool-call-result";
@@ -85,18 +85,18 @@ export type ProcessDocumentToolCallResultPart = {
   messageId: string;
 };
 
-export type SearchDocumentToolCallResultPart = {
+export type ReadDocumentToolCallResultPart = {
   type: "tool-call-result";
   id: string;
-  name: "searchDocument";
-  input: SearchDocumentToolInput;
-  output: SearchDocumentToolOutput;
+  name: "readDocument";
+  input: ReadDocumentToolInput;
+  output: ReadDocumentToolOutput;
   messageId: string;
 };
 
 export type ToolCallResultPart =
   | ProcessDocumentToolCallResultPart
-  | SearchDocumentToolCallResultPart;
+  | ReadDocumentToolCallResultPart;
 
 export type ToolCallEndPart = {
   type: "tool-call-end";
@@ -155,17 +155,17 @@ export type ProcessDocumentToolCallContentBlock = {
   output: ProcessDocumentToolOutput;
 };
 
-export type SearchDocumentToolCallContentBlock = {
+export type ReadDocumentToolCallContentBlock = {
   type: "tool-call";
   id: string;
-  name: "searchDocument";
-  input: SearchDocumentToolInput;
-  output: SearchDocumentToolOutput;
+  name: "readDocument";
+  input: ReadDocumentToolInput;
+  output: ReadDocumentToolOutput;
 };
 
 export type ToolCallContentBlock =
   | ProcessDocumentToolCallContentBlock
-  | SearchDocumentToolCallContentBlock;
+  | ReadDocumentToolCallContentBlock;
 
 export type UserContentBlock = TextContentBlock | DocumentContentBlock;
 
@@ -177,6 +177,8 @@ export type UserMessage = {
   id: string;
   role: "user";
   content: UserContentBlock[];
+  feedback?: null;
+  finishReason?: null;
   parentMessageId?: string | null;
   chatId: string;
   createdAt?: Date;

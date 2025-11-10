@@ -139,7 +139,7 @@ export function sseRequestHandler(
         return next(error);
       }
 
-      console.log("ERROR: ", error);
+      console.error("ERROR: ", error);
 
       const appliationError =
         error instanceof ApplicationError
@@ -148,7 +148,7 @@ export function sseRequestHandler(
 
       const event: ServerSentEvent<"error", ApplicationError> = {
         event: "error",
-        data: appliationError,
+        error: appliationError,
       };
 
       res.write(`data: ${JSON.stringify(event)}\n\n`);

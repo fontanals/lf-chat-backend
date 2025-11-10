@@ -31,8 +31,7 @@ export class SessionRepository implements ISessionRepository {
       WHERE
         ${filters?.id != null ? `id = $${++paramsCount} AND` : ""}
         ${filters?.userId != null ? `user_id = $${++paramsCount} AND` : ""}
-        TRUE
-      ORDER BY created_at;`,
+        TRUE;`,
       [filters?.id, filters?.userId].filter((param) => param != null)
     );
 

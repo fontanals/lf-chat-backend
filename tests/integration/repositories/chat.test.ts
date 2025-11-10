@@ -2,11 +2,13 @@ import { randomUUID } from "crypto";
 import { addDays } from "date-fns";
 import { DataContext } from "../../../src/data/data-context";
 import { Chat } from "../../../src/models/entities/chat";
+import { Project } from "../../../src/models/entities/project";
 import { User } from "../../../src/models/entities/user";
 import { ChatRepository } from "../../../src/repositories/chat";
 import {
   createTestPool,
   insertChats,
+  insertProjects,
   insertUsers,
   truncateChats,
   truncateUsers,
@@ -17,31 +19,57 @@ describe("ChatRepository", () => {
   const dataContext = new DataContext(pool);
   const chatRepository = new ChatRepository(dataContext);
 
-  let chatNumber = 0;
-  const users: User[] = Array.from({ length: 3 }, (_, index) => ({
+  const mockUsers: User[] = Array.from({ length: 6 }, (_, index) => ({
     id: randomUUID(),
-    name: `user ${index + 1}`,
-    email: `user${index + 1}@example.com`,
+    name: `User ${index + 1}`,
+    email: `user${index}@example.com`,
     password: "password",
-    displayName: "user",
-    customPreferences: null,
-    createdAt: addDays(new Date(), -index),
+    displayName: `User ${index + 1}`,
+    customPrompt: null,
+    createdAt: new Date(),
+    updatedAt: new Date(),
   }));
-  const chats: Chat[] = users.flatMap((user, index) =>
-    Array.from({ length: index < 2 ? 5 : 0 }, () => ({
-      id: randomUUID(),
-      title: `chat ${++chatNumber}`,
-      userId: user.id,
-      createdAt: addDays(new Date(), -chatNumber),
-    }))
-  );
+
+  const mockProjects: Project[] = mockUsers.slice(0, 2).map((user, index) => ({
+    id: randomUUID(),
+    title: `Project ${index + 1}`,
+    description: `Project ${index + 1} Description`,
+    userId: user.id,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  }));
+
+  let chatNumber = 0;
+  const mockChats: Chat[] = [
+    ...mockUsers.slice(0, 4).flatMap((user) =>
+      Array.from({ length: 5 }, () => ({
+        id: randomUUID(),
+        title: `Chat ${++chatNumber}`,
+        projectId: null,
+        userId: user.id,
+        createdAt: addDays(new Date(), -chatNumber),
+        updatedAt: addDays(new Date(), -chatNumber),
+      }))
+    ),
+    ...mockProjects.flatMap((project) =>
+      Array.from({ length: 3 }, () => ({
+        id: randomUUID(),
+        title: `Chat ${++chatNumber}`,
+        projectId: project.id,
+        userId: project.userId,
+        createdAt: addDays(new Date(), -chatNumber),
+        updatedAt: addDays(new Date(), -chatNumber),
+      }))
+    ),
+  ];
 
   beforeAll(async () => {
-    await insertUsers(users, pool);
+    await insertUsers(mockUsers, pool);
+    await insertProjects(mockProjects, pool);
   });
 
   beforeEach(async () => {
-    await insertChats(chats, pool);
+    await insertChats(mockChats, pool);
   });
 
   afterEach(async () => {
@@ -61,9 +89,9 @@ describe("ChatRepository", () => {
     });
 
     it("should return true when chat exists", async () => {
-      const chat = chats[0];
+      const mockChat = mockChats[0];
 
-      const exists = await chatRepository.exists({ id: chat.id });
+      const exists = await chatRepository.exists({ id: mockChat.id });
 
       expect(exists).toBe(true);
     });
@@ -74,34 +102,53 @@ describe("ChatRepository", () => {
       const databaseChats = await chatRepository.findAll();
 
       expect(databaseChats).toEqual(
-        chats.sort(
+        [...mockChats].sort(
           (chatA, chatB) =>
-            (chatB.createdAt?.getTime() ?? 0) -
-            (chatA.createdAt?.getTime() ?? 0)
+            chatB.createdAt!.getTime() - chatA.createdAt!.getTime()
         )
       );
     });
 
     it("should return an empty array when user has no chats", async () => {
-      const user = users[2];
+      const mockUser = mockUsers[4];
 
-      const databaseChats = await chatRepository.findAll({ userId: user.id });
+      const databaseChats = await chatRepository.findAll({
+        userId: mockUser.id,
+      });
 
       expect(databaseChats).toEqual([]);
     });
 
     it("should return user chats ordered by creation date desc", async () => {
-      const user = users[0];
+      const mockUser = mockUsers[0];
 
-      const databaseChats = await chatRepository.findAll({ userId: user.id });
+      const databaseChats = await chatRepository.findAll({
+        userId: mockUser.id,
+      });
 
       expect(databaseChats).toEqual(
-        chats
-          .filter((chat) => chat.userId === user.id)
+        mockChats
+          .filter((chat) => chat.userId === mockUser.id)
           .sort(
             (chatA, chatB) =>
-              (chatB.createdAt?.getTime() ?? 0) -
-              (chatA.createdAt?.getTime() ?? 0)
+              chatB.createdAt!.getTime() - chatA.createdAt!.getTime()
+          )
+      );
+    });
+
+    it("should return project chats ordered by creation date desc", async () => {
+      const mockProject = mockProjects[0];
+
+      const databaseChats = await chatRepository.findAll({
+        projectId: mockProject.id,
+      });
+
+      expect(databaseChats).toEqual(
+        mockChats
+          .filter((chat) => chat.projectId === mockProject.id)
+          .sort(
+            (chatA, chatB) =>
+              chatB.createdAt!.getTime() - chatA.createdAt!.getTime()
           )
       );
     });
@@ -109,38 +156,66 @@ describe("ChatRepository", () => {
 
   describe("findAllPaginated", () => {
     it("should return empty pagination when user has no chats", async () => {
-      const user = users[2];
+      const mockUser = mockUsers[4];
 
-      const databasePaginatedUserChats = await chatRepository.findAllPaginated(
+      const databaseUserPaginatedChats = await chatRepository.findAllPaginated(
         new Date(),
-        10,
-        { userId: user.id }
+        25,
+        { userId: mockUser.id }
       );
 
-      expect(databasePaginatedUserChats).toEqual({ items: [], totalItems: 0 });
+      expect(databaseUserPaginatedChats).toEqual({ items: [], totalItems: 0 });
     });
 
     it("should return user chats ordered by creation date desc paginated", async () => {
-      const user = users[0];
+      const mockUser = mockUsers[0];
+
+      const cursor = new Date();
       const limit = 2;
 
       const databaseChats = await chatRepository.findAllPaginated(
-        addDays(new Date(), -10),
+        cursor,
         limit,
-        { userId: user.id }
+        { userId: mockUser.id }
       );
 
-      const sortedUserChats = chats
-        .filter((chat) => chat.userId === user.id)
+      const sortedUserChats = mockChats
+        .filter((chat) => chat.userId === mockUser.id)
         .sort(
           (chatA, chatB) =>
-            (chatB.createdAt?.getTime() ?? 0) -
-            (chatA.createdAt?.getTime() ?? 0)
+            chatB.createdAt!.getTime() - chatA.createdAt!.getTime()
         );
 
       expect(databaseChats).toEqual({
         items: sortedUserChats.slice(0, limit),
         totalItems: sortedUserChats.length,
+        nextCursor: sortedUserChats[limit]?.createdAt,
+      });
+    });
+
+    it("should return project chats ordered by creation date desc paginated", async () => {
+      const mockProject = mockProjects[0];
+
+      const cursor = new Date();
+      const limit = 2;
+
+      const databaseChats = await chatRepository.findAllPaginated(
+        cursor,
+        limit,
+        { projectId: mockProject.id }
+      );
+
+      const sortedProjectChats = mockChats
+        .filter((chat) => chat.projectId === mockProject.id)
+        .sort(
+          (chatA, chatB) =>
+            chatB.createdAt!.getTime() - chatA.createdAt!.getTime()
+        );
+
+      expect(databaseChats).toEqual({
+        items: sortedProjectChats.slice(0, limit),
+        totalItems: sortedProjectChats.length,
+        nextCursor: sortedProjectChats[limit]?.createdAt,
       });
     });
   });
@@ -153,22 +228,23 @@ describe("ChatRepository", () => {
     });
 
     it("should return chat", async () => {
-      const chat = chats[0];
+      const mockChat = mockChats[0];
 
-      const databaseChat = await chatRepository.findOne({ id: chat.id });
+      const databaseChat = await chatRepository.findOne({ id: mockChat.id });
 
-      expect(databaseChat).toEqual(chat);
+      expect(databaseChat).toEqual(mockChat);
     });
   });
 
   describe("create", () => {
     it("should create a new chat", async () => {
-      const user = users[0];
+      const mockUser = mockUsers[0];
 
       const chat: Chat = {
         id: randomUUID(),
-        title: "new chat",
-        userId: user.id,
+        title: "New Chat",
+        projectId: null,
+        userId: mockUser.id,
       };
 
       await chatRepository.create(chat);
@@ -176,24 +252,33 @@ describe("ChatRepository", () => {
       const databaseChats = await chatRepository.findAll();
 
       expect(databaseChats).toEqual(
-        expect.arrayContaining([...chats, expect.objectContaining(chat)])
+        expect.arrayContaining([
+          ...mockChats,
+          { ...chat, createdAt: expect.any(Date), updatedAt: expect.any(Date) },
+        ])
       );
     });
   });
 
   describe("update", () => {
     it("should update chat title", async () => {
-      const targetChat = chats[0];
+      const mockChat = mockChats[0];
 
-      await chatRepository.update(targetChat.id, { title: "chat 1 updated" });
+      await chatRepository.update(mockChat.id, {
+        title: "Chat Title Updated",
+      });
 
       const databaseChats = await chatRepository.findAll();
 
       expect(databaseChats).toEqual(
         expect.arrayContaining(
-          chats.map((chat) =>
-            chat.id === targetChat.id
-              ? { ...chat, title: "chat 1 updated" }
+          mockChats.map((chat) =>
+            chat.id === mockChat.id
+              ? {
+                  ...chat,
+                  title: "Chat Title Updated",
+                  updatedAt: expect.any(Date),
+                }
               : chat
           )
         )
@@ -207,19 +292,19 @@ describe("ChatRepository", () => {
 
       const databaseChats = await chatRepository.findAll();
 
-      expect(databaseChats).toEqual(expect.arrayContaining(chats));
+      expect(databaseChats).toEqual(expect.arrayContaining(mockChats));
     });
 
     it("should delete chat", async () => {
-      const targetChat = chats[0];
+      const mockChat = mockChats[0];
 
-      await chatRepository.delete(targetChat.id);
+      await chatRepository.delete(mockChat.id);
 
       const databaseChats = await chatRepository.findAll();
 
       expect(databaseChats).toEqual(
         expect.arrayContaining(
-          chats.filter((chat) => chat.id !== targetChat.id)
+          mockChats.filter((chat) => chat.id !== mockChat.id)
         )
       );
     });

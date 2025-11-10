@@ -21,18 +21,20 @@ type DocumentChunkQueryRow = {
   documentProjectId?: string | null;
   documentUserId?: string;
   documentCreatedAt?: Date;
-  documentUdpatedAt?: Date;
+  documentUpdatedAt?: Date;
 };
 
 export type DocumentChunkFilters = NullablePartial<
   DocumentChunk & {
     chatId: string;
     projectId: string;
+    limit: number;
     includeDocument: boolean;
   }
 >;
 
 export interface IDocumentChunkRepository {
+  findAll(filters?: DocumentChunkFilters): Promise<DocumentChunk[]>;
   findRelevant(
     embedding: number[],
     limit: number,
@@ -46,6 +48,73 @@ export class DocumentChunkRepository implements IDocumentChunkRepository {
 
   constructor(dataContext: IDataContext) {
     this.dataContext = dataContext;
+  }
+
+  async findAll(filters?: DocumentChunkFilters): Promise<DocumentChunk[]> {
+    let paramsCount = 0;
+
+    const result = await this.dataContext.query<DocumentChunkQueryRow>(
+      `SELECT
+        document_chunk.id AS "documentChunkId",
+        document_chunk.index AS "documentChunkIndex",
+        document_chunk.content AS "documentChunkContent",
+        document_chunk.document_id AS "documentChunkDocumentId",
+        document_chunk.created_at AS "documentChunkCreatedAt"
+        ${
+          filters?.includeDocument
+            ? `, document.id AS "documentId",
+              document.key AS "documentKey",
+              document.name AS "documentName",
+              document.mimetype AS "documentMimetype",
+              document.size_in_bytes AS "documentSizeInBytes",
+              document.is_processed AS "documentIsProcessed",
+              document.chat_id AS "documentChatId",
+              document.project_id AS "documentProjectId",
+              document.user_id AS "documentUserId",
+              document.created_at AS "documentCreatedAt",
+              document.updated_at AS "documentUpdatedAt"`
+            : ""
+        }
+      FROM "document_chunk"
+      ${
+        filters?.includeDocument ||
+        filters?.chatId != null ||
+        filters?.projectId != null
+          ? "JOIN document ON document.id = document_chunk.document_id"
+          : ""
+      }
+      WHERE
+        ${
+          filters?.documentId != null
+            ? `document_chunk.document_id = $${++paramsCount} AND`
+            : ""
+        }
+        ${
+          filters?.chatId != null
+            ? `document.chat_id = $${++paramsCount} AND`
+            : ""
+        }
+        ${
+          filters?.projectId != null
+            ? `document.project_id = $${++paramsCount} AND`
+            : ""
+        }
+        TRUE
+      ${filters?.limit != null ? `LIMIT $${++paramsCount}` : ""};`,
+      [
+        filters?.documentId,
+        filters?.chatId,
+        filters?.projectId,
+        filters?.limit,
+      ].filter((param) => param != null)
+    );
+
+    const documentChunks = this.mapRowsToDocumentChunks(
+      result.rows,
+      Boolean(filters?.includeDocument)
+    );
+
+    return documentChunks;
   }
 
   async findRelevant(
@@ -80,7 +149,9 @@ export class DocumentChunkRepository implements IDocumentChunkRepository {
         1 - (document_chunk.embedding <-> $${++paramsCount}) AS distance
       FROM "document_chunk"
       ${
-        filters?.chatId != null || filters?.projectId != null
+        filters?.includeDocument ||
+        filters?.chatId != null ||
+        filters?.projectId != null
           ? "JOIN document ON document.id = document_chunk.document_id"
           : ""
       }
@@ -152,6 +223,7 @@ export class DocumentChunkRepository implements IDocumentChunkRepository {
       content: row.documentChunkContent,
       documentId: row.documentChunkDocumentId,
       embedding: [],
+      createdAt: row.documentChunkCreatedAt,
       document: includeDocument ? this.mapRowToDocument(row) : undefined,
     };
   }
@@ -168,7 +240,7 @@ export class DocumentChunkRepository implements IDocumentChunkRepository {
       projectId: row.documentProjectId,
       userId: row.documentUserId!,
       createdAt: row.documentCreatedAt,
-      udpatedAt: row.documentUdpatedAt,
+      updatedAt: row.documentUpdatedAt,
     };
   }
 

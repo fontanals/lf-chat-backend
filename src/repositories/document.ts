@@ -2,7 +2,6 @@ import { IDataContext } from "../data/data-context";
 import { Document } from "../models/entities/document";
 import { ArrayUtils } from "../utils/arrays";
 import { NumberUtils } from "../utils/numbers";
-import { StringUtils } from "../utils/strings";
 import { NullablePartial } from "../utils/types";
 
 export type DocumentFilters = NullablePartial<Document & { ids: string[] }>;
@@ -16,7 +15,6 @@ export interface IDocumentRepository {
   create(document: Document): Promise<void>;
   update(id: string, document: NullablePartial<Document>): Promise<void>;
   delete(id: string): Promise<void>;
-  deleteAll(filters?: DocumentFilters): Promise<void>;
 }
 
 export class DocumentRepository implements IDocumentRepository {
@@ -267,31 +265,6 @@ export class DocumentRepository implements IDocumentRepository {
       WHERE
         id = $1;`,
       [id]
-    );
-  }
-
-  async deleteAll(filters?: DocumentFilters): Promise<void> {
-    if (
-      StringUtils.allIsNullOrEmpty(
-        filters?.chatId,
-        filters?.projectId,
-        filters?.userId
-      )
-    ) {
-      return;
-    }
-
-    let paramsCount = 0;
-
-    await this.dataContext.execute(
-      `DELETE FROM "document"
-      WHERE
-        ${filters?.chatId != null ? `chat_id = $${++paramsCount} AND` : ""}
-        ${
-          filters?.projectId != null ? `project_id = $${++paramsCount} AND` : ""
-        }
-        ${filters?.userId != null ? `user_id = $${++paramsCount} AND` : ""}
-        TRUE;`
     );
   }
 }

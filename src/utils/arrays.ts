@@ -12,4 +12,11 @@ export class ArrayUtils {
 
     return array![0];
   }
+
+  static count<TItem>(array: TItem[], value: TItem): number {
+    return array.reduce(
+      (count, item) => (item === value ? count + 1 : count),
+      0
+    );
+  }
 }

@@ -94,19 +94,5 @@ export function createAuthRoutes(serviceContainer: ServiceContainer) {
     })
   );
 
-  router.post(
-    "/delete-account",
-    authMiddleware(serviceContainer),
-    jsonRequestHandler(serviceContainer, async (req, res, services) => {
-      const authService = services.get("AuthService");
-
-      const response = await authService.deleteAccount(req.authContext);
-
-      res.clearCookie(refreshTokenCookieName);
-
-      return response;
-    })
-  );
-
   return router;
 }

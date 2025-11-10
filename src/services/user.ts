@@ -1,5 +1,7 @@
+import bcrypt from "bcrypt";
 import z from "zod";
 import { IDataContext } from "../data/data-context";
+import { IFileStorage } from "../files/file-storage";
 import { mapUserToDto } from "../models/entities/user";
 import {
   ChangePasswordRequest,
@@ -7,14 +9,15 @@ import {
 } from "../models/requests/user";
 import {
   ChangePasswordResponse,
+  DeleteUserResponse,
   GetUserResponse,
   UpdateUserResponse,
 } from "../models/responses/user";
+import { IDocumentRepository } from "../repositories/document";
 import { IUserRepository } from "../repositories/user";
 import { ApplicationError } from "../utils/errors";
 import { validateRequest } from "../utils/express";
 import { AuthContext } from "./auth";
-import bcrypt from "bcrypt";
 
 export interface IUserService {
   getUser(authContext: AuthContext): Promise<GetUserResponse>;
@@ -26,15 +29,25 @@ export interface IUserService {
     request: ChangePasswordRequest,
     authContext: AuthContext
   ): Promise<ChangePasswordResponse>;
+  deleteUser(authContext: AuthContext): Promise<DeleteUserResponse>;
 }
 
 export class UserService implements IUserService {
   private readonly dataContext: IDataContext;
+  private readonly fileStorage: IFileStorage;
   private readonly userRepository: IUserRepository;
+  private readonly documentRepository: IDocumentRepository;
 
-  constructor(dataContext: IDataContext, userRepository: IUserRepository) {
+  constructor(
+    dataContext: IDataContext,
+    fileStorage: IFileStorage,
+    userRepository: IUserRepository,
+    documentRepository: IDocumentRepository
+  ) {
     this.dataContext = dataContext;
+    this.fileStorage = fileStorage;
     this.userRepository = userRepository;
+    this.documentRepository = documentRepository;
   }
 
   async getUser(authContext: AuthContext): Promise<GetUserResponse> {
@@ -115,5 +128,19 @@ export class UserService implements IUserService {
     await this.userRepository.update(user.id, { password: hashedNewPassword });
 
     return user.id;
+  }
+
+  async deleteUser(authContext: AuthContext): Promise<DeleteUserResponse> {
+    const documents = await this.documentRepository.findAll({
+      userId: authContext.user.id,
+    });
+
+    await this.fileStorage.deleteFiles(
+      documents.map((document) => document.key)
+    );
+
+    await this.userRepository.delete(authContext.user.id);
+
+    return authContext.user.id;
   }
 }

@@ -7,11 +7,16 @@ describe("MessageRepository", () => {
   let dataContext: jest.Mocked<IDataContext>;
   let messageRepository: MessageRepository;
 
-  const mockMessages: Message[] = Array.from({ length: 5 }, (_, index) => ({
+  const mockMessages: Message[] = Array.from({ length: 10 }, (_, index) => ({
     id: randomUUID(),
-    role: index % 2 === 0 ? "user" : "assistant",
-    content: `message ${index + 1}`,
+    role: "user",
+    content: [{ type: "text", id: randomUUID(), text: `Message ${index + 1}` }],
+    feedback: null,
+    finishReason: null,
+    parentMessageId: null,
     chatId: randomUUID(),
+    createdAt: new Date(),
+    updatedAt: new Date(),
   }));
 
   beforeEach(() => {
@@ -24,6 +29,26 @@ describe("MessageRepository", () => {
     };
 
     messageRepository = new MessageRepository(dataContext);
+  });
+
+  describe("exists", () => {
+    it("should return false when no message is found", async () => {
+      dataContext.query.mockResolvedValue({ rows: [] });
+
+      const exists = await messageRepository.exists();
+
+      expect(exists).toBe(false);
+    });
+
+    it("should return true when a message is found", async () => {
+      const mockMessage = mockMessages[0];
+
+      dataContext.query.mockResolvedValue({ rows: [mockMessage] });
+
+      const exists = await messageRepository.exists();
+
+      expect(exists).toBe(true);
+    });
   });
 
   describe("findAll", () => {

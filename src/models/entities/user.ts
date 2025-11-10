@@ -19,5 +19,6 @@ export function mapUserToDto(user: User): UserDto {
     displayName: user.displayName,
     customPrompt: user.customPrompt,
     createdAt: user.createdAt,
+    updatedAt: user.updatedAt,
   };
 }

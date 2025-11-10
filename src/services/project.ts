@@ -17,7 +17,6 @@ import {
   GetProjectsResponse,
   UpdateProjectResponse,
 } from "../models/responses/project";
-import { IDocumentRepository } from "../repositories/document";
 import { IProjectRepository } from "../repositories/project";
 import { ApplicationError } from "../utils/errors";
 import { getQueryStringArray, validateRequest } from "../utils/express";
@@ -49,18 +48,15 @@ export class ProjectService implements IProjectService {
   private readonly dataContext: IDataContext;
   private readonly fileStorage: IFileStorage;
   private readonly projectRepository: IProjectRepository;
-  private readonly documentRepository: IDocumentRepository;
 
   constructor(
     dataContext: IDataContext,
     fileStorage: IFileStorage,
-    projectRepository: IProjectRepository,
-    documentRepository: IDocumentRepository
+    projectRepository: IProjectRepository
   ) {
     this.dataContext = dataContext;
     this.fileStorage = fileStorage;
     this.projectRepository = projectRepository;
-    this.documentRepository = documentRepository;
   }
 
   async getProjects(authContext: AuthContext): Promise<GetProjectsResponse> {
@@ -160,24 +156,12 @@ export class ProjectService implements IProjectService {
       throw ApplicationError.notFound();
     }
 
-    try {
-      await this.dataContext.begin();
+    await this.fileStorage.deleteFiles(
+      project.documents!.map((document) => document.key)
+    );
 
-      await this.fileStorage.deleteFiles(
-        project.documents!.map((document) => document.key)
-      );
+    await this.projectRepository.delete(params.projectId);
 
-      await this.documentRepository.deleteAll({ projectId: params.projectId });
-
-      await this.projectRepository.delete(params.projectId);
-
-      await this.dataContext.commit();
-
-      return params.projectId;
-    } catch (error) {
-      await this.dataContext.rollback();
-
-      throw error;
-    }
+    return params.projectId;
   }
 }

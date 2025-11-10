@@ -106,8 +106,8 @@ export class MessageRepository implements IMessageRepository {
         message.id,
         message.role,
         JSON.stringify(message.content),
-        message.role === "assistant" ? message.feedback : null,
-        message.role === "assistant" ? message.finishReason : null,
+        message.feedback,
+        message.finishReason,
         message.parentMessageId,
         message.chatId,
       ]
@@ -121,16 +121,8 @@ export class MessageRepository implements IMessageRepository {
       `UPDATE "message"
       SET
         ${message.content != null ? `content = $${++paramsCount},` : ""}
-        ${
-          (message as AssistantMessage).feedback != null
-            ? `feedback = $${++paramsCount},`
-            : ""
-        }
-        ${
-          (message as AssistantMessage).feedback === null
-            ? "feedback = null,"
-            : ""
-        }
+        ${message.feedback != null ? `feedback = $${++paramsCount},` : ""}
+        ${message.feedback === null ? "feedback = null," : ""}
         id = id
       WHERE
         id = $${++paramsCount};`,

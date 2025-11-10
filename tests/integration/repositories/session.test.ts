@@ -1,5 +1,4 @@
 import { randomUUID } from "crypto";
-import { addDays } from "date-fns";
 import { DataContext } from "../../../src/data/data-context";
 import { Session } from "../../../src/models/entities/session";
 import { User } from "../../../src/models/entities/user";
@@ -17,46 +16,32 @@ describe("SessionRepository", () => {
   const dataContext = new DataContext(pool);
   const sessionRepository = new SessionRepository(dataContext);
 
-  const users: User[] = [
-    {
+  const mockUsers: User[] = Array.from({ length: 5 }, (_, index) => ({
+    id: randomUUID(),
+    name: `User ${index + 1}`,
+    email: `user${index}@example.com`,
+    password: "password",
+    displayName: `User ${index + 1}`,
+    customPrompt: null,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  }));
+
+  const mockSessions = mockUsers.flatMap((user) =>
+    Array.from({ length: 5 }, () => ({
       id: randomUUID(),
-      name: "user 1",
-      email: "user1@example.com",
-      password: "password",
-      createdAt: addDays(new Date(), -12),
-    },
-    {
-      id: randomUUID(),
-      name: "user 2",
-      email: "user2@example.com",
-      password: "password",
-      createdAt: addDays(new Date(), -17),
-    },
-  ];
-  const sessions: Session[] = [
-    {
-      id: randomUUID(),
-      userId: users[0].id,
-      createdAt: addDays(new Date(), -5),
-    },
-    {
-      id: randomUUID(),
-      userId: users[1].id,
-      createdAt: addDays(new Date(), -2),
-    },
-    {
-      id: randomUUID(),
-      userId: users[1].id,
-      createdAt: addDays(new Date(), -1),
-    },
-  ];
+      expiresAt: new Date(),
+      userId: user.id,
+      createdAt: new Date(),
+    }))
+  );
 
   beforeAll(async () => {
-    await insertUsers(users, pool);
+    await insertUsers(mockUsers, pool);
   });
 
   beforeEach(async () => {
-    await insertSessions(sessions, pool);
+    await insertSessions(mockSessions, pool);
   });
 
   afterEach(async () => {
@@ -72,50 +57,49 @@ describe("SessionRepository", () => {
     it("should return all sessions", async () => {
       const databaseSessions = await sessionRepository.findAll();
 
-      const expectedSessions = expect.arrayContaining(
-        sessions.map((session) => expect.objectContaining(session))
-      );
-
-      expect(databaseSessions).toEqual(expectedSessions);
+      expect(databaseSessions).toEqual(mockSessions);
     });
   });
 
   describe("findOne", () => {
     it("should return null when session does not exist", async () => {
-      const sessionId = randomUUID();
-
       const databaseSession = await sessionRepository.findOne({
-        id: sessionId,
+        id: randomUUID(),
       });
 
       expect(databaseSession).toBeNull();
     });
 
     it("should return session", async () => {
-      const session = sessions[0];
+      const mockSession = mockSessions[0];
 
       const databaseSession = await sessionRepository.findOne({
-        id: session.id,
+        id: mockSession.id,
       });
 
-      expect(databaseSession).toEqual(expect.objectContaining(session));
+      expect(databaseSession).toEqual(mockSession);
     });
   });
 
   describe("create", () => {
     it("should create a new session", async () => {
-      const session: Session = { id: randomUUID(), userId: users[0].id };
+      const mockUser = mockUsers[0];
 
-      await sessionRepository.create(session);
+      const newSession: Session = {
+        id: randomUUID(),
+        expiresAt: new Date(),
+        userId: mockUser.id,
+      };
+
+      await sessionRepository.create(newSession);
 
       const databaseSessions = await sessionRepository.findAll();
 
       expect(databaseSessions).toEqual(
-        expect.arrayContaining(
-          [...sessions, session].map((session) =>
-            expect.objectContaining(session)
-          )
-        )
+        expect.arrayContaining([
+          ...mockSessions,
+          { ...newSession, createdAt: expect.any(Date) },
+        ])
       );
     });
   });

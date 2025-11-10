@@ -1,3 +1,4 @@
+import { randomUUID } from "crypto";
 import { Pool, PoolClient } from "pg";
 import { DataContext } from "../../../src/data/data-context";
 
@@ -6,7 +7,7 @@ describe("DataContext", () => {
   let pool: jest.Mocked<Pool>;
   let dataContext: DataContext;
 
-  const mockResult = { rows: [{ id: 1 }] };
+  const mockResult = { rows: [{ id: randomUUID() }] };
 
   beforeEach(() => {
     client = {
@@ -35,7 +36,7 @@ describe("DataContext", () => {
       expect(result).toEqual(mockResult);
     });
 
-    it("should execute query using client when using transaction", async () => {
+    it("should execute query using client when open transaction", async () => {
       const query = "query";
       const params = ["param"];
 
@@ -60,7 +61,7 @@ describe("DataContext", () => {
       expect(pool.query).toHaveBeenCalledWith(query, params);
     });
 
-    it("should execute query using client when using transaction", async () => {
+    it("should execute query using client when open transaction", async () => {
       const query = "query";
       const params = ["param"];
 

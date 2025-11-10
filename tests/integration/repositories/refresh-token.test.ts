@@ -1,8 +1,6 @@
 import { randomUUID } from "crypto";
-import { addDays } from "date-fns";
 import { DataContext } from "../../../src/data/data-context";
 import { RefreshToken } from "../../../src/models/entities/refresh-token";
-import { Session } from "../../../src/models/entities/session";
 import { User } from "../../../src/models/entities/user";
 import { RefreshTokenRepository } from "../../../src/repositories/refresh-token";
 import {
@@ -19,68 +17,45 @@ describe("RefreshTokenRepository", () => {
   const dataContext = new DataContext(pool);
   const refreshTokenRepository = new RefreshTokenRepository(dataContext);
 
-  const users: User[] = [
-    {
+  const mockUsers: User[] = Array.from({ length: 3 }, (_, index) => ({
+    id: randomUUID(),
+    name: `User ${index + 1}`,
+    email: `user${index}@example.com`,
+    password: "password",
+    displayName: `User ${index + 1}`,
+    customPrompt: null,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  }));
+
+  const mockSessions = mockUsers.flatMap((user) =>
+    Array.from({ length: 2 }, () => ({
       id: randomUUID(),
-      name: "user 1",
-      email: "user1@example.com",
-      password: "password",
-      createdAt: addDays(new Date(), -15),
-    },
-    {
+      expiresAt: new Date(),
+      userId: user.id,
+      createdAt: new Date(),
+    }))
+  );
+
+  const mockRefreshTokens: RefreshToken[] = mockSessions.flatMap((session) =>
+    Array.from({ length: 5 }, () => ({
       id: randomUUID(),
-      name: "user 2",
-      email: "user2@example.com",
-      password: "password",
-      createdAt: addDays(new Date(), -18),
-    },
-  ];
-  const sessions: Session[] = [
-    {
-      id: randomUUID(),
-      userId: users[0].id,
-      createdAt: addDays(new Date(), -5),
-    },
-    {
-      id: randomUUID(),
-      userId: users[1].id,
-      createdAt: addDays(new Date(), -3),
-    },
-  ];
-  const refreshTokens: RefreshToken[] = [
-    {
-      id: randomUUID(),
-      token: "refresh token 1",
-      expiresAt: addDays(new Date(), 2),
+      token: randomUUID(),
+      expiresAt: session.expiresAt,
       isRevoked: false,
-      sessionId: sessions[0].id,
-      createdAt: addDays(new Date(), -5),
-    },
-    {
-      id: randomUUID(),
-      token: "refresh token 2",
-      expiresAt: addDays(new Date(), 4),
-      isRevoked: true,
-      sessionId: sessions[1].id,
-      createdAt: addDays(new Date(), -3),
-    },
-    {
-      id: randomUUID(),
-      token: "refresh token 3",
-      expiresAt: addDays(new Date(), 6),
-      isRevoked: false,
-      sessionId: sessions[1].id,
-      createdAt: addDays(new Date(), -1),
-    },
-  ];
+      sessionId: session.id,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    }))
+  );
 
   beforeAll(async () => {
-    await insertUsers(users, pool);
-    await insertSessions(sessions, pool);
+    await insertUsers(mockUsers, pool);
+    await insertSessions(mockSessions, pool);
   });
 
   beforeEach(async () => {
-    await insertRefreshTokens(refreshTokens, pool);
+    await insertRefreshTokens(mockRefreshTokens, pool);
   });
 
   afterEach(async () => {
@@ -96,80 +71,79 @@ describe("RefreshTokenRepository", () => {
     it("should return all refresh tokens", async () => {
       const databaseRefreshTokens = await refreshTokenRepository.findAll();
 
-      expect(databaseRefreshTokens).toEqual(
-        expect.arrayContaining(
-          refreshTokens.map((refreshToken) =>
-            expect.objectContaining(refreshToken)
-          )
-        )
-      );
+      expect(databaseRefreshTokens).toEqual(mockRefreshTokens);
     });
   });
 
   describe("findOne", () => {
     it("should return null when refresh token does not exist", async () => {
-      const token = randomUUID();
-
       const databaseRefreshToken = await refreshTokenRepository.findOne({
-        token,
+        token: randomUUID(),
       });
 
       expect(databaseRefreshToken).toBeNull();
     });
 
     it("should return refresh token", async () => {
-      const refreshToken = refreshTokens[0];
+      const mockRefreshToken = mockRefreshTokens[0];
 
       const databaseRefreshToken = await refreshTokenRepository.findOne({
-        token: refreshToken.token,
+        token: mockRefreshToken.token,
       });
 
-      expect(databaseRefreshToken).toEqual(
-        expect.objectContaining(refreshToken)
-      );
+      expect(databaseRefreshToken).toEqual(mockRefreshToken);
     });
   });
 
   describe("create", () => {
     it("should create a new refresh token", async () => {
-      const sessionId = sessions[1].id;
+      const mockSession = mockSessions[0];
 
-      const refreshToken: RefreshToken = {
+      const newRefreshToken: RefreshToken = {
         id: randomUUID(),
         token: "token",
-        expiresAt: addDays(new Date(), 7),
+        expiresAt: mockSession.expiresAt,
         isRevoked: false,
-        sessionId,
+        sessionId: mockSession.id,
       };
 
-      await refreshTokenRepository.create(refreshToken);
+      await refreshTokenRepository.create(newRefreshToken);
 
       const databaseRefreshTokens = await refreshTokenRepository.findAll();
 
       expect(databaseRefreshTokens).toEqual(
-        expect.arrayContaining(
-          [...refreshTokens, refreshToken].map((refreshToken) =>
-            expect.objectContaining(refreshToken)
-          )
-        )
+        expect.arrayContaining([
+          ...mockRefreshTokens,
+          {
+            ...newRefreshToken,
+            createdAt: expect.any(Date),
+            updatedAt: expect.any(Date),
+          },
+        ])
       );
     });
   });
 
   describe("update", () => {
     it("should revoke refresh token", async () => {
-      const refreshTokenId = refreshTokens[0].id;
+      const mockRefreshToken = mockRefreshTokens[0];
 
-      await refreshTokenRepository.update(refreshTokenId, { isRevoked: true });
+      await refreshTokenRepository.update(mockRefreshToken.id, {
+        isRevoked: true,
+      });
 
       const databaseRefreshTokens = await refreshTokenRepository.findAll();
 
       expect(databaseRefreshTokens).toEqual(
         expect.arrayContaining(
-          refreshTokens.map((refreshToken) =>
-            refreshToken.id === refreshTokenId
-              ? expect.objectContaining({ ...refreshToken, isRevoked: true })
-              : expect.objectContaining(refreshToken)
+          mockRefreshTokens.map((refreshToken) =>
+            refreshToken.id === mockRefreshToken.id
+              ? {
+                  ...refreshToken,
+                  isRevoked: true,
+                  updatedAt: expect.any(Date),
+                }
+              : refreshToken
           )
         )
       );
@@ -178,18 +152,22 @@ describe("RefreshTokenRepository", () => {
 
   describe("revokeSession", () => {
     it("should revoke all refresh tokens from session", async () => {
-      const sessionId = sessions[0].id;
+      const mockSession = mockSessions[0];
 
-      await refreshTokenRepository.revokeSession(sessionId);
+      await refreshTokenRepository.revokeSession(mockSession.id);
 
       const databaseRefreshTokens = await refreshTokenRepository.findAll();
 
       expect(databaseRefreshTokens).toEqual(
         expect.arrayContaining(
-          refreshTokens.map((refreshToken) =>
-            refreshToken.sessionId === sessionId
-              ? expect.objectContaining({ ...refreshToken, isRevoked: true })
-              : expect.objectContaining(refreshToken)
+          mockRefreshTokens.map((refreshToken) =>
+            refreshToken.sessionId === mockSession.id
+              ? {
+                  ...refreshToken,
+                  isRevoked: true,
+                  updatedAt: expect.any(Date),
+                }
+              : refreshToken
           )
         )
       );

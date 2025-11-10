@@ -2,7 +2,7 @@ import z from "zod";
 import { IDataContext } from "../data/data-context";
 import { IFileStorage } from "../files/file-storage";
 import { Chat } from "../models/entities/chat";
-import { Message } from "../models/entities/message";
+import { Message, UserMessage } from "../models/entities/message";
 import { Project } from "../models/entities/project";
 import {
   CreateChatRequest,
@@ -43,6 +43,7 @@ import {
 } from "../utils/express";
 import { IAssistantService } from "./assistant";
 import { AuthContext } from "./auth";
+import { ArrayUtils } from "../utils/arrays";
 
 export interface IChatService {
   getAssistantMode(): Promise<GetAssistantModeResponse>;
@@ -63,14 +64,14 @@ export interface IChatService {
     request: CreateChatRequest,
     authContext: AuthContext,
     onSendEvent: (event: SendMessageEvent) => void,
-    abortSignal: AbortSignal
+    abortSignal?: AbortSignal
   ): Promise<void>;
   sendMessage(
     params: SendMessageParams,
     request: SendMessageRequest,
     authContext: AuthContext,
     onSendEvent: (event: SendMessageEvent) => void,
-    abortSignal: AbortSignal
+    abortSignal?: AbortSignal
   ): Promise<void>;
   updateChat(
     params: UpdateChatParams,
@@ -139,11 +140,7 @@ export class ChatService implements IChatService {
       { title: search, projectId, userId: authContext.user.id }
     );
 
-    return {
-      items: paginatedChats.items,
-      totalItems: paginatedChats.totalItems,
-      nextCursor: paginatedChats.nextCursor?.toISOString(),
-    };
+    return paginatedChats;
   }
 
   async getChat(
@@ -219,7 +216,7 @@ export class ChatService implements IChatService {
     request: CreateChatRequest,
     authContext: AuthContext,
     onSendEvent: (event: SendMessageEvent) => void,
-    abortSignal: AbortSignal
+    abortSignal?: AbortSignal
   ): Promise<void> {
     validateRequest(
       request,
@@ -246,7 +243,7 @@ export class ChatService implements IChatService {
       userId: authContext.user.id,
     };
 
-    const userMessage: Message = {
+    const userMessage: UserMessage = {
       id: request.id,
       role: "user",
       content: request.message,
@@ -290,7 +287,7 @@ export class ChatService implements IChatService {
 
     const assistantMessage = await this.assistantService.sendMessage({
       previousMessages: [],
-      message: userMessage,
+      userMessage: userMessage,
       userCustomPrompt: user?.customPrompt,
       project,
       documents,
@@ -321,7 +318,7 @@ export class ChatService implements IChatService {
     request: SendMessageRequest,
     authContext: AuthContext,
     onSendEvent: (event: SendMessageEvent) => void,
-    abortSignal: AbortSignal
+    abortSignal?: AbortSignal
   ): Promise<void> {
     validateRequest(
       request,
@@ -334,7 +331,6 @@ export class ChatService implements IChatService {
               type: z.literal("document"),
               id: z.string(),
               name: z.string(),
-              mimetype: z.string(),
             }),
           ])
         ),
@@ -352,7 +348,7 @@ export class ChatService implements IChatService {
       throw ApplicationError.notFound();
     }
 
-    const userMessage: Message = {
+    const userMessage: UserMessage = {
       id: request.id,
       role: "user",
       content: request.content,
@@ -382,7 +378,7 @@ export class ChatService implements IChatService {
 
     const assistantMessage = await this.assistantService.sendMessage({
       previousMessages,
-      message: userMessage,
+      userMessage: userMessage,
       userCustomPrompt: user?.customPrompt,
       project: chat.project,
       documents,
@@ -483,24 +479,14 @@ export class ChatService implements IChatService {
       chatId: params.chatId,
     });
 
-    try {
-      await this.dataContext.begin();
-
+    if (!ArrayUtils.isNullOrEmpty(documents)) {
       await this.fileStorage.deleteFiles(
         documents.map((document) => document.key)
       );
-
-      await this.documentRepository.deleteAll({ chatId: params.chatId });
-
-      await this.chatRepository.delete(params.chatId);
-
-      await this.dataContext.commit();
-
-      return params.chatId;
-    } catch (error) {
-      await this.dataContext.rollback();
-
-      throw error;
     }
+
+    await this.chatRepository.delete(params.chatId);
+
+    return params.chatId;
   }
 }

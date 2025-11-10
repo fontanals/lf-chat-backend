@@ -144,8 +144,8 @@ export class MockAssistantService implements IAssistantService {
       content: [],
       feedback: null,
       finishReason: "stop",
-      parentMessageId: options.message.id,
-      chatId: options.message.chatId,
+      parentMessageId: options.userMessage.id,
+      chatId: options.userMessage.chatId,
     };
 
     const mockChat = mockChats[Math.floor(Math.random() * mockChats.length)];
@@ -154,7 +154,7 @@ export class MockAssistantService implements IAssistantService {
 
     await PromiseUtils.sleep(50);
 
-    if (options.abortSignal.aborted) {
+    if (options.abortSignal?.aborted) {
       response.finishReason = "interrupted";
 
       options.onMessagePart({
@@ -182,7 +182,7 @@ export class MockAssistantService implements IAssistantService {
 
     await PromiseUtils.sleep(50);
 
-    if (options.abortSignal.aborted) {
+    if (options.abortSignal?.aborted) {
       response.finishReason = "interrupted";
 
       options.onMessagePart({
@@ -208,7 +208,7 @@ export class MockAssistantService implements IAssistantService {
           ? textParts[index] + " "
           : textParts[index];
 
-      if (options.abortSignal.aborted) {
+      if (options.abortSignal?.aborted) {
         response.finishReason = "interrupted";
 
         options.onMessagePart({
@@ -247,7 +247,7 @@ export class MockAssistantService implements IAssistantService {
 
     await PromiseUtils.sleep(50);
 
-    if (options.abortSignal.aborted) {
+    if (options.abortSignal?.aborted) {
       response.finishReason = "interrupted";
 
       options.onMessagePart({

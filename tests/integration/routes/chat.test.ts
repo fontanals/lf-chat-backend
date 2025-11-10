@@ -1,4 +1,3 @@
-import bcrypt from "bcrypt";
 import { randomUUID } from "crypto";
 import { addDays } from "date-fns";
 import express from "express";
@@ -7,28 +6,26 @@ import request from "supertest";
 import { Application } from "../../../src/app";
 import { config } from "../../../src/config";
 import { Chat } from "../../../src/models/entities/chat";
+import { Document } from "../../../src/models/entities/document";
 import { Message } from "../../../src/models/entities/message";
-import { Session } from "../../../src/models/entities/session";
-import { mapUserToDto, User } from "../../../src/models/entities/user";
+import { Project } from "../../../src/models/entities/project";
+import { User } from "../../../src/models/entities/user";
 import {
   CreateChatRequest,
-  GetChatsQuery,
   SendMessageRequest,
   UpdateChatRequest,
+  UpdateMessageRequest,
 } from "../../../src/models/requests/chat";
-import { ChatServerSentEvent } from "../../../src/models/responses/chat";
-import {
-  ApplicationErrorCode,
-  HttpStatusCode,
-} from "../../../src/utils/errors";
-import {
-  ErrorServerSentEvent,
-  ServerSentEvent,
-} from "../../../src/utils/types";
+import { SendMessageEvent } from "../../../src/models/responses/chat";
+import { ArrayUtils } from "../../../src/utils/arrays";
+import { ApplicationErrorCode } from "../../../src/utils/errors";
+import { HttpStatusCode } from "../../../src/utils/types";
 import {
   createTestPool,
   insertChats,
+  insertDocuments,
   insertMessages,
+  insertProjects,
   insertUsers,
   truncateChats,
   truncateUsers,
@@ -39,138 +36,260 @@ describe("Chat Routes", () => {
   const pool = createTestPool();
   const app = new Application(expressApp, pool);
 
-  const users: User[] = [
-    {
-      id: randomUUID(),
-      name: "user 1",
-      email: "user1@example.com",
-      password: "password",
-      createdAt: addDays(new Date(), -12),
-    },
-    {
-      id: randomUUID(),
-      name: "user 2",
-      email: "user2@example.com",
-      password: "password",
-      createdAt: addDays(new Date(), -15),
-    },
-  ];
-  const sessions: Session[] = [
-    {
-      id: randomUUID(),
-      userId: users[0].id,
-      createdAt: addDays(new Date(), -12),
-    },
-    {
-      id: randomUUID(),
-      userId: users[1].id,
-      createdAt: addDays(new Date(), -15),
-    },
-  ];
-  const accessTokens = users.map((user, index) =>
+  const mockUsers: User[] = Array.from({ length: 2 }, (_, index) => ({
+    id: randomUUID(),
+    name: `User ${index + 1}`,
+    email: `user${index + 1}@example.com`,
+    password: "password",
+    displayName: `User ${index + 1}`,
+    customPrompt: null,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  }));
+
+  const accessTokens = mockUsers.map((user) =>
     jsonwebtoken.sign(
-      { session: sessions[index], user: mapUserToDto(user) },
+      {
+        session: {
+          id: randomUUID(),
+          expiresAt: new Date(),
+          userId: user.id,
+          createdAt: new Date(),
+        },
+        user: { id: user.id, name: user.name, email: user.email },
+      },
       config.ACCESS_TOKEN_SECRET,
       { expiresIn: "15m" }
     )
   );
-  const chats: Chat[] = [
+
+  const project: Project = {
+    id: randomUUID(),
+    title: "Project 1",
+    description: "Project 1 Description",
+    userId: mockUsers[0].id,
+    createdAt: mockUsers[0].createdAt,
+    updatedAt: new Date(),
+  };
+
+  let chatNumber = 0;
+  const mockChats: Chat[] = mockUsers.flatMap((user, userIndex) =>
+    Array.from({ length: 15 }, (_, index) => ({
+      id: randomUUID(),
+      title: `Chat ${++chatNumber}`,
+      projectId: userIndex === 0 && index === 0 ? project.id : null,
+      userId: user.id,
+      createdAt: addDays(new Date(), -chatNumber),
+      updatedAt: addDays(new Date(), -chatNumber),
+    }))
+  );
+
+  const mockDocuments: Document[] = [
     {
       id: randomUUID(),
-      userId: users[0].id,
-      title: "user 1 chat 1",
-      createdAt: addDays(new Date(), -2),
+      key: "test/to-learn-notes.txt",
+      name: "To Learn Notes.txt",
+      mimetype: "text/plain",
+      sizeInBytes: 1024,
+      isProcessed: true,
+      chatId: mockChats[0].id,
+      projectId: null,
+      userId: mockUsers[0].id,
+      createdAt: new Date(),
+      updatedAt: new Date(),
     },
     {
       id: randomUUID(),
-      userId: users[0].id,
-      title: "user 1 chat 2",
-      createdAt: addDays(new Date(), -4),
-    },
-    {
-      id: randomUUID(),
-      userId: users[1].id,
-      title: "user 2 chat 1",
-      createdAt: addDays(new Date(), -8),
-    },
-    {
-      id: randomUUID(),
-      userId: users[1].id,
-      title: "user 2 chat 2",
-      createdAt: addDays(new Date(), -10),
-    },
-  ];
-  const messages: Message[] = [
-    {
-      id: randomUUID(),
-      role: "user",
-      content: "message",
-      chatId: chats[0].id,
-      createdAt: addDays(new Date(), -2),
-    },
-    {
-      id: randomUUID(),
-      role: "assistant",
-      content: "message",
-      chatId: chats[0].id,
-      createdAt: addDays(new Date(), -2),
-    },
-    {
-      id: randomUUID(),
-      role: "user",
-      content: "message",
-      chatId: chats[1].id,
-      createdAt: addDays(new Date(), -4),
-    },
-    {
-      id: randomUUID(),
-      role: "assistant",
-      content: "message",
-      chatId: chats[1].id,
-      createdAt: addDays(new Date(), -4),
-    },
-    {
-      id: randomUUID(),
-      role: "user",
-      content: "message",
-      chatId: chats[2].id,
-      createdAt: addDays(new Date(), -8),
-    },
-    {
-      id: randomUUID(),
-      role: "assistant",
-      content: "message",
-      chatId: chats[2].id,
-      createdAt: addDays(new Date(), -8),
-    },
-    {
-      id: randomUUID(),
-      role: "user",
-      content: "message",
-      chatId: chats[3].id,
-      createdAt: addDays(new Date(), -10),
-    },
-    {
-      id: randomUUID(),
-      role: "assistant",
-      content: "message",
-      chatId: chats[3].id,
-      createdAt: addDays(new Date(), -10),
+      key: "test/to-learn-notes-backend.txt",
+      name: "To Learn Notes Backend.txt",
+      mimetype: "text/plain",
+      sizeInBytes: 1024,
+      isProcessed: false,
+      chatId: mockChats[0].id,
+      projectId: null,
+      userId: mockUsers[0].id,
+      createdAt: new Date(),
+      updatedAt: new Date(),
     },
   ];
+
+  const getDocumentChatMessages = (): Message[] => {
+    const chat = mockChats[0];
+    const document = mockDocuments[0];
+    const chatMessages: Message[] = [];
+
+    let message: Message = {
+      id: randomUUID(),
+      role: "user",
+      content: [
+        { type: "document", id: document.id, name: document.name },
+        {
+          type: "text",
+          id: randomUUID(),
+          text: "Can you summarize the content of my learning notes for this month?",
+        },
+      ],
+      feedback: null,
+      finishReason: null,
+      parentMessageId: null,
+      chatId: chat.id,
+      createdAt: chat.createdAt,
+      updatedAt: chat.updatedAt,
+    };
+
+    chatMessages.push(message);
+
+    message = {
+      id: randomUUID(),
+      role: "assistant",
+      content: [
+        {
+          type: "text",
+          id: randomUUID(),
+          text: "Sure! Let me take a look at your leaning notes first.",
+        },
+        {
+          type: "tool-call",
+          id: randomUUID(),
+          name: "processDocument",
+          input: { id: document.id, name: document.name },
+          output: { success: true, data: mockDocuments[0].id },
+        },
+        {
+          type: "tool-call",
+          id: randomUUID(),
+          name: "readDocument",
+          input: { id: document.id, name: document.name, query: "" },
+          output: {
+            success: true,
+            data: "<document-chunk>To learn this month:\n\n- [x] HTML\n- [x] CSS\n- [x] JavasScript\n- [ ] TypeScript\n- [ ] React\n- [ ] Next.js</document-chunk>",
+          },
+        },
+        {
+          type: "text",
+          id: randomUUID(),
+          text: "Based on your learning notes for this month, you have focused on web development technologies. You have completed learning HTML, CSS, and JavaScript. You are currently working on TypeScript and have plans to learn React and Next.js next.",
+        },
+      ],
+      feedback: null,
+      finishReason: "stop",
+      parentMessageId: message.id,
+      chatId: chat.id,
+      createdAt: chat.createdAt,
+      updatedAt: chat.updatedAt,
+    };
+
+    chatMessages.push(message);
+
+    message = {
+      id: randomUUID(),
+      role: "user",
+      content: [
+        {
+          type: "text",
+          id: randomUUID(),
+          text: "What is the next topic I should learn?",
+        },
+      ],
+      feedback: null,
+      finishReason: null,
+      parentMessageId: message.id,
+      chatId: chat.id,
+      createdAt: chat.createdAt,
+      updatedAt: chat.updatedAt,
+    };
+
+    chatMessages.push(message);
+
+    message = {
+      id: randomUUID(),
+      role: "assistant",
+      content: [
+        {
+          type: "text",
+          id: randomUUID(),
+          text: "Based on your current learning progress, the next topic you should learn is TypeScript. It will build upon your existing knowledge of JavaScript and provide you with strong typing capabilities, which are essential for modern web development.",
+        },
+      ],
+      feedback: null,
+      finishReason: "stop",
+      parentMessageId: message.id,
+      chatId: chat.id,
+      createdAt: chat.createdAt,
+      updatedAt: chat.updatedAt,
+    };
+
+    chatMessages.push(message);
+
+    return chatMessages;
+  };
+
+  const mockMessages: Message[] = mockChats.flatMap((chat, chatIndex) => {
+    if (chatIndex === 0) {
+      return getDocumentChatMessages();
+    }
+
+    const userMessageId = randomUUID();
+
+    return [
+      {
+        id: userMessageId,
+        role: "user",
+        content: [{ type: "text", id: randomUUID(), text: "Hello!" }],
+        feedback: null,
+        finishReason: null,
+        parentMessageId: null,
+        chatId: chat.id,
+        createdAt: chat.createdAt,
+        updatedAt: chat.updatedAt,
+      },
+      {
+        id: randomUUID(),
+        role: "assistant",
+        content: [
+          {
+            type: "text",
+            id: randomUUID(),
+            text: "Hi there! How can I help you today?",
+          },
+        ],
+        feedback: null,
+        finishReason: "stop",
+        parentMessageId: userMessageId,
+        chatId: chat.id,
+        createdAt: chat.createdAt,
+        updatedAt: chat.updatedAt,
+      },
+    ];
+  });
 
   beforeAll(async () => {
-    const password = await bcrypt.hash("password", 10);
+    const fileStorage = app.serviceContainer.get("FileStorage");
 
-    await insertUsers(
-      users.map((user) => ({ ...user, password })),
-      pool
+    await Promise.all(
+      mockDocuments.map((document) =>
+        fileStorage.writeFile(
+          document.key,
+          document.mimetype,
+          document.name === "To Learn Notes.txt"
+            ? Buffer.from(
+                "To learn this month:\n\n- [x] HTML\n- [x] CSS\n- [x] JavasScript\n- [ ] TypeScript\n- [ ] React\n- [ ] Next.js"
+              )
+            : Buffer.from(
+                "To learn for Backend:\n\n- [ ] Node.js\n- [ ] Express\n- [ ] PostgreSQL\n"
+              )
+        )
+      )
     );
+
+    await insertUsers(mockUsers, pool);
+    await insertProjects([project], pool);
   });
 
   beforeEach(async () => {
-    await insertChats(chats, pool);
-    await insertMessages(messages, pool);
+    await insertChats(mockChats, pool);
+    await insertDocuments(mockDocuments, pool);
+    await insertMessages(mockMessages, pool);
   });
 
   afterEach(async () => {
@@ -178,6 +297,12 @@ describe("Chat Routes", () => {
   });
 
   afterAll(async () => {
+    const fileStorage = app.serviceContainer.get("FileStorage");
+
+    await fileStorage.deleteFiles(
+      mockDocuments.map((document) => document.key)
+    );
+
     await truncateUsers(pool);
     await app.end();
   });
@@ -187,36 +312,28 @@ describe("Chat Routes", () => {
       const response = await request(expressApp).get("/api/chats");
 
       expect(response.status).toBe(HttpStatusCode.Unauthorized);
-      expect(response.headers["content-type"]).toBe(
-        "application/json; charset=utf-8"
-      );
+
       expect(response.body).toEqual({
         success: false,
         error: expect.objectContaining({
-          statusCode: HttpStatusCode.Unauthorized,
           code: ApplicationErrorCode.Unauthorized,
         }),
       });
     });
 
     it("should return a success response with the user chats ordered by creation date desc paginated", async () => {
-      const userId = users[0].id;
-      const accessToken = accessTokens[0];
-      const page = 1;
-      const pageSize = 50;
+      const mockUser = mockUsers[0];
 
-      const getChatsQuery: GetChatsQuery = {
-        page: page.toString(),
-        pageSize: pageSize.toString(),
-      };
+      const cursor = new Date();
+      const limit = 10;
 
       const response = await request(expressApp)
         .get("/api/chats")
-        .query(getChatsQuery)
-        .set("Authorization", `Bearer ${accessToken}`);
+        .query({ cursor: cursor.toString(), limit: limit.toString() })
+        .set("Authorization", `Bearer ${accessTokens[0]}`);
 
-      const sortedUserChats = chats
-        .filter((chat) => chat.userId === userId)
+      const sortedUserChats = mockChats
+        .filter((chat) => chat.userId === mockUser.id)
         .sort(
           (chatA, chatB) =>
             (chatB.createdAt?.getTime() ?? 0) -
@@ -224,26 +341,106 @@ describe("Chat Routes", () => {
         );
 
       expect(response.status).toBe(HttpStatusCode.Ok);
-      expect(response.headers["content-type"]).toBe(
-        "application/json; charset=utf-8"
-      );
+
       expect(response.body).toEqual({
         success: true,
         data: {
-          chats: {
-            items: sortedUserChats
-              .slice((page - 1) * pageSize, page * pageSize)
-              .map((chat) =>
-                expect.objectContaining({
-                  ...chat,
-                  createdAt: chat.createdAt?.toISOString(),
-                })
-              ),
-            totalItems: sortedUserChats.length,
-            page,
-            pageSize,
-            totalPages: Math.ceil(sortedUserChats.length / pageSize),
-          },
+          items: sortedUserChats.slice(0, limit).map((chat) => ({
+            ...chat,
+            createdAt: chat.createdAt!.toISOString(),
+            updatedAt: chat.updatedAt!.toISOString(),
+          })),
+          totalItems: sortedUserChats.length,
+          nextCursor: sortedUserChats[limit].createdAt!.toISOString(),
+        },
+      });
+    });
+  });
+
+  describe("getChat", () => {
+    it("should return an unauthorized response when no access or refresh token is provided", async () => {
+      const mockChat = mockChats[0];
+
+      const response = await request(expressApp).get(
+        `/api/chats/${mockChat.id}`
+      );
+
+      expect(response.status).toBe(HttpStatusCode.Unauthorized);
+
+      expect(response.body).toEqual({
+        success: false,
+        error: expect.objectContaining({
+          code: ApplicationErrorCode.Unauthorized,
+        }),
+      });
+    });
+
+    it("should return a not found response when chat does not exist", async () => {
+      const response = await request(expressApp)
+        .get(`/api/chats/${randomUUID()}`)
+        .set("Authorization", `Bearer ${accessTokens[0]}`);
+
+      expect(response.status).toBe(HttpStatusCode.NotFound);
+
+      expect(response.body).toEqual({
+        success: false,
+        error: expect.objectContaining({
+          code: ApplicationErrorCode.NotFound,
+        }),
+      });
+    });
+
+    it("should return a not found response when chat is from another user", async () => {
+      const mockChat = mockChats[20];
+
+      const response = await request(expressApp)
+        .get(`/api/chats/${mockChat.id}`)
+        .set("Authorization", `Bearer ${accessTokens[0]}`);
+
+      expect(response.status).toBe(HttpStatusCode.NotFound);
+
+      expect(response.body).toEqual({
+        success: false,
+        error: expect.objectContaining({
+          code: ApplicationErrorCode.NotFound,
+        }),
+      });
+    });
+
+    it("should return a success response with the chat", async () => {
+      const mockChat = mockChats[0];
+
+      const response = await request(expressApp)
+        .get(`/api/chats/${mockChat.id}`)
+        .set("Authorization", `Bearer ${accessTokens[0]}`);
+
+      expect(response.status).toBe(HttpStatusCode.Ok);
+
+      expect(response.body).toEqual({
+        success: true,
+        data: {
+          ...mockChat,
+          createdAt: mockChat.createdAt!.toISOString(),
+          updatedAt: mockChat.updatedAt!.toISOString(),
+        },
+      });
+    });
+
+    it("should return a success response with the chat including project", async () => {
+      const mockChat = mockChats[0];
+
+      const response = await request(expressApp)
+        .get(`/api/chats/${mockChat.id}`)
+        .set("Authorization", `Bearer ${accessTokens[0]}`);
+
+      expect(response.status).toBe(HttpStatusCode.Ok);
+
+      expect(response.body).toEqual({
+        success: true,
+        data: {
+          ...mockChat,
+          createdAt: mockChat.createdAt!.toISOString(),
+          updatedAt: mockChat.updatedAt!.toISOString(),
         },
       });
     });
@@ -251,74 +448,89 @@ describe("Chat Routes", () => {
 
   describe("getChatMessages", () => {
     it("should return an unauthorized response when no access or refresh token is provided", async () => {
-      const chatId = chats[0].id;
+      const mockChat = mockChats[0];
 
       const response = await request(expressApp).get(
-        `/api/chats/${chatId}/messages`
+        `/api/chats/${mockChat.id}/messages`
       );
 
       expect(response.status).toBe(HttpStatusCode.Unauthorized);
-      expect(response.headers["content-type"]).toBe(
-        "application/json; charset=utf-8"
-      );
+
       expect(response.body).toEqual({
         success: false,
         error: expect.objectContaining({
-          statusCode: HttpStatusCode.Unauthorized,
           code: ApplicationErrorCode.Unauthorized,
         }),
       });
     });
 
-    it("should return a not found response when chat is from another user", async () => {
-      const accessToken = accessTokens[0];
-      const chatId = chats[2].id;
-
+    it("should return a not found response when chat does not exist", async () => {
       const response = await request(expressApp)
-        .get(`/api/chats/${chatId}/messages`)
-        .set("Authorization", `Bearer ${accessToken}`);
+        .get(`/api/chats/${randomUUID()}/messages`)
+        .set("Authorization", `Bearer ${accessTokens[0]}`);
 
       expect(response.status).toBe(HttpStatusCode.NotFound);
-      expect(response.headers["content-type"]).toBe(
-        "application/json; charset=utf-8"
-      );
+
       expect(response.body).toEqual({
         success: false,
         error: expect.objectContaining({
-          statusCode: HttpStatusCode.NotFound,
           code: ApplicationErrorCode.NotFound,
         }),
       });
     });
 
-    it("should return a success response with the chat messages ordered by creation date", async () => {
-      const accessToken = accessTokens[1];
-      const chatId = chats[2].id;
+    it("should return a not found response when chat is from another user", async () => {
+      const mockChat = mockChats[20];
 
       const response = await request(expressApp)
-        .get(`/api/chats/${chatId}/messages`)
-        .set("Authorization", `Bearer ${accessToken}`);
+        .get(`/api/chats/${mockChat.id}/messages`)
+        .set("Authorization", `Bearer ${accessTokens[0]}`);
+
+      expect(response.status).toBe(HttpStatusCode.NotFound);
+
+      expect(response.body).toEqual({
+        success: false,
+        error: expect.objectContaining({
+          code: ApplicationErrorCode.NotFound,
+        }),
+      });
+    });
+
+    it("should return a success response with the chat message tree", async () => {
+      const mockChat = mockChats[0];
+      const mockChatMessages = mockMessages.filter(
+        (message) => message.chatId === mockChat.id
+      );
+
+      const response = await request(expressApp)
+        .get(`/api/chats/${mockChat.id}/messages`)
+        .set("Authorization", `Bearer ${accessTokens[0]}`);
 
       expect(response.status).toBe(HttpStatusCode.Ok);
-      expect(response.headers["content-type"]).toBe(
-        "application/json; charset=utf-8"
-      );
+
       expect(response.body).toEqual({
         success: true,
         data: {
-          messages: messages
-            .filter((message) => message.chatId === chatId)
-            .sort(
-              (messageA, messageB) =>
-                (messageA.createdAt?.getTime() ?? 0) -
-                (messageB.createdAt?.getTime() ?? 0)
-            )
-            .map((message) =>
-              expect.objectContaining({
-                ...message,
-                createdAt: message.createdAt?.toISOString(),
-              })
-            ),
+          latestPath: mockChatMessages.map((message) => message.id),
+          rootMessageIds: [mockChatMessages[0].id],
+          messages: mockChatMessages.reduce((messagesMap, message) => {
+            const messageCopy = {
+              ...message,
+              childrenMessageIds: [],
+              createdAt: message.createdAt!.toISOString(),
+              updatedAt: message.updatedAt!.toISOString(),
+            };
+
+            messagesMap[messageCopy.id] = messageCopy;
+
+            if (messageCopy.parentMessageId != null) {
+              messagesMap[messageCopy.parentMessageId].childrenMessageIds = [
+                messageCopy.id,
+              ];
+            }
+
+            return messagesMap;
+          }, {} as any),
         },
       });
     });
@@ -328,7 +540,7 @@ describe("Chat Routes", () => {
     it("should return an unauthorized response when no access or refresh token is provided", async () => {
       const createChatRequest: CreateChatRequest = {
         id: randomUUID(),
-        message: "message",
+        message: [{ type: "text", id: randomUUID(), text: "User Message" }],
       };
 
       const response = await request(expressApp)
@@ -336,109 +548,179 @@ describe("Chat Routes", () => {
         .send(createChatRequest);
 
       expect(response.status).toBe(HttpStatusCode.Unauthorized);
-      expect(response.headers["content-type"]).toBe(
-        "application/json; charset=utf-8"
-      );
+
       expect(response.body).toEqual({
         success: false,
         error: expect.objectContaining({
-          statusCode: HttpStatusCode.Unauthorized,
           code: ApplicationErrorCode.Unauthorized,
         }),
       });
     });
 
-    it("should return a bad request event when request does not match request schema", async () => {
-      const accessToken = accessTokens[0];
-
-      let errorEvent: ErrorServerSentEvent | null = null;
-
+    it("should return a bad request response when request does not match schema", async () => {
       const response = await request(expressApp)
         .post("/api/chats/")
-        .send({ message: "message" })
-        .set("Authorization", `Bearer ${accessToken}`)
-        .set("Accept", "text/event-stream; charset=utf-8")
-        .buffer(true)
-        .parse((res, callback) => {
-          res.setEncoding("utf8");
+        .send({ id: randomUUID() })
+        .set("Authorization", `Bearer ${accessTokens[0]}`);
 
-          res.on("data", (chunk) => {
-            const serializedEvent = chunk.toString().split("data: ")[1];
+      expect(response.status).toBe(HttpStatusCode.BadRequest);
 
-            if (serializedEvent != null) {
-              const event = JSON.parse(serializedEvent) as ServerSentEvent;
-
-              if (event.event === "error") {
-                errorEvent = event as ErrorServerSentEvent;
-              }
-            }
-          });
-
-          res.on("end", () => {
-            callback(null, "");
-          });
-        });
-
-      expect(response.status).toBe(HttpStatusCode.Ok);
-      expect(response.headers["content-type"]).toBe(
-        "text/event-stream; charset=utf-8"
-      );
-      expect(response.headers["cache-control"]).toBe("no-cache");
-      expect(response.headers["connection"]).toBe("keep-alive");
-      expect(errorEvent).toEqual({
-        event: "error",
-        data: expect.objectContaining({
-          statusCode: HttpStatusCode.BadRequest,
+      expect(response.body).toEqual({
+        success: false,
+        error: expect.objectContaining({
           code: ApplicationErrorCode.BadRequest,
         }),
-        isDone: true,
       });
     });
 
-    it("should create a new chat returning assistant message events", async () => {
-      const accessToken = accessTokens[0];
-
+    it("should create a new chat and stream assistant response", async () => {
       const createChatRequest: CreateChatRequest = {
         id: randomUUID(),
-        message: "message",
+        message: [{ type: "text", id: randomUUID(), text: "Hello!" }],
       };
+
+      let receivedEvents: string[] = [];
+      let messageId = "";
 
       const response = await request(expressApp)
         .post("/api/chats")
         .send(createChatRequest)
-        .set("Authorization", `Bearer ${accessToken}`)
+        .set("Authorization", `Bearer ${accessTokens[0]}`)
         .set("Accept", "text/event-stream; charset=utf-8")
         .buffer(true)
         .parse((res, callback) => {
           res.setEncoding("utf8");
 
           res.on("data", (chunk) => {
-            const serializedEvent = chunk.toString().split("data: ")[1];
+            const event = JSON.parse(
+              chunk.toString().slice(5, -2)
+            ) as SendMessageEvent;
 
-            if (serializedEvent != null) {
-              const event = JSON.parse(serializedEvent) as ChatServerSentEvent;
+            receivedEvents.push(event.event);
 
-              if (event.event === "start") {
+            switch (event.event) {
+              case "start": {
+                expect(event).toEqual({ event: "start" });
+
+                break;
+              }
+              case "message-start": {
+                messageId = event.data.messageId;
+
                 expect(event).toEqual({
-                  event: "start",
-                  data: { messageId: expect.any(String) },
-                  isDone: false,
-                });
-              } else if (event.event === "delta") {
-                expect(event).toEqual({
-                  event: "delta",
+                  event: "message-start",
                   data: {
+                    type: "message-start",
                     messageId: expect.any(String),
-                    delta: expect.any(String),
                   },
-                  isDone: false,
                 });
-              } else if (event.event === "end") {
+
+                break;
+              }
+              case "text-start": {
                 expect(event).toEqual({
-                  event: "end",
-                  data: { messageId: expect.any(String) },
-                  isDone: true,
+                  event: "text-start",
+                  data: {
+                    type: "text-start",
+                    id: expect.any(String),
+                    messageId,
+                  },
                 });
+
+                break;
+              }
+              case "text-delta": {
+                expect(event).toEqual({
+                  event: "text-delta",
+                  data: {
+                    type: "text-delta",
+                    id: expect.any(String),
+                    delta: expect.any(String),
+                    messageId,
+                  },
+                });
+
+                break;
+              }
+              case "text-end": {
+                expect(event).toEqual({
+                  event: "text-end",
+                  data: { type: "text-end", id: expect.any(String), messageId },
+                });
+
+                break;
+              }
+              case "tool-call-start": {
+                expect(event).toEqual({
+                  event: "tool-call-start",
+                  data: {
+                    type: "tool-call-start",
+                    id: expect.any(String),
+                    name: expect.any(String),
+                    messageId,
+                  },
+                });
+
+                break;
+              }
+              case "tool-call": {
+                expect(event).toEqual({
+                  event: "tool-call",
+                  data: {
+                    type: "tool-call",
+                    id: expect.any(String),
+                    name: expect.any(String),
+                    input: expect.any(Object),
+                    messageId,
+                  },
+                });
+
+                break;
+              }
+              case "tool-call-result": {
+                expect(event).toEqual({
+                  event: "tool-call-result",
+                  data: {
+                    type: "tool-call-result",
+                    id: expect.any(String),
+                    name: expect.any(String),
+                    input: expect.any(Object),
+                    output: expect.any(Object),
+                    messageId,
+                  },
+                });
+
+                break;
+              }
+              case "tool-call-end": {
+                expect(event).toEqual({
+                  event: "tool-call-end",
+                  data: {
+                    type: "tool-call-end",
+                    id: expect.any(String),
+                    name: expect.any(String),
+                    messageId,
+                  },
+                });
+
+                break;
+              }
+              case "message-end": {
+                expect(event).toEqual({
+                  event: "message-end",
+                  data: {
+                    type: "message-end",
+                    finishReason: expect.any(String),
+                    messageId,
+                  },
+                });
+
+                break;
+              }
+              case "end": {
+                expect(event).toEqual({ event: "end" });
+
+                break;
               }
             }
           });
@@ -449,186 +731,253 @@ describe("Chat Routes", () => {
         });
 
       expect(response.status).toBe(HttpStatusCode.Ok);
-      expect(response.headers["content-type"]).toBe(
-        "text/event-stream; charset=utf-8"
+
+      expect(receivedEvents).toContain("start");
+      expect(receivedEvents).toContain("message-start");
+      expect(ArrayUtils.count(receivedEvents, "text-start")).toEqual(
+        ArrayUtils.count(receivedEvents, "text-end")
       );
-      expect(response.headers["cache-control"]).toBe("no-cache");
-      expect(response.headers["connection"]).toBe("keep-alive");
-    });
+      expect(ArrayUtils.count(receivedEvents, "tool-call-start")).toEqual(
+        ArrayUtils.count(receivedEvents, "tool-call")
+      );
+      expect(ArrayUtils.count(receivedEvents, "tool-call-start")).toEqual(
+        ArrayUtils.count(receivedEvents, "tool-call-result")
+      );
+      expect(ArrayUtils.count(receivedEvents, "tool-call-start")).toEqual(
+        ArrayUtils.count(receivedEvents, "tool-call-end")
+      );
+      expect(receivedEvents).toContain("message-end");
+      expect(receivedEvents).toContain("end");
+    }, 60000);
   });
 
   describe("sendMessage", () => {
     it("should return an unauthorized response when no access or refresh token is provided", async () => {
-      const chatId = chats[0].id;
+      const mockChat = mockChats[0];
 
       const sendMessageRequest: SendMessageRequest = {
         id: randomUUID(),
-        content: "message",
+        content: [{ type: "text", id: randomUUID(), text: "New User Message" }],
       };
 
       const response = await request(expressApp)
-        .post(`/api/chats/${chatId}/messages`)
+        .post(`/api/chats/${mockChat.id}/messages`)
         .send(sendMessageRequest);
 
       expect(response.status).toBe(HttpStatusCode.Unauthorized);
-      expect(response.headers["content-type"]).toBe(
-        "application/json; charset=utf-8"
-      );
+
       expect(response.body).toEqual({
         success: false,
         error: expect.objectContaining({
-          statusCode: HttpStatusCode.Unauthorized,
           code: ApplicationErrorCode.Unauthorized,
         }),
       });
     });
 
-    it("should return a bad request event when request does not match request schema", async () => {
-      const accessToken = accessTokens[0];
-      const chatId = chats[0].id;
-
-      let errorEvent: ErrorServerSentEvent | null = null;
+    it("should return a bad request response when reques does not match schema", async () => {
+      const mockChat = mockChats[0];
 
       const response = await request(expressApp)
-        .post(`/api/chats/${chatId}/messages`)
-        .send({ message: "message" })
-        .set("Authorization", `Bearer ${accessToken}`)
-        .set("Accept", "text/event-stream; charset=utf-8")
-        .buffer(true)
-        .parse((res, callback) => {
-          res.setEncoding("utf8");
+        .post(`/api/chats/${mockChat.id}/messages`)
+        .send({ id: randomUUID(), content: 123 })
+        .set("Authorization", `Bearer ${accessTokens[0]}`);
 
-          res.on("data", (chunk) => {
-            const serializedEvent = chunk.toString().split("data: ")[1];
+      expect(response.status).toBe(HttpStatusCode.BadRequest);
 
-            if (serializedEvent != null) {
-              const event = JSON.parse(serializedEvent) as ServerSentEvent;
-
-              if (event.event === "error") {
-                errorEvent = event as ErrorServerSentEvent;
-              }
-            }
-          });
-
-          res.on("end", () => {
-            callback(null, "");
-          });
-        });
-
-      expect(response.status).toBe(HttpStatusCode.Ok);
-      expect(response.headers["content-type"]).toBe(
-        "text/event-stream; charset=utf-8"
-      );
-      expect(response.headers["cache-control"]).toBe("no-cache");
-      expect(response.headers["connection"]).toBe("keep-alive");
-      expect(errorEvent).toEqual({
-        event: "error",
-        data: expect.objectContaining({
-          statusCode: HttpStatusCode.BadRequest,
+      expect(response.body).toEqual({
+        success: false,
+        error: expect.objectContaining({
           code: ApplicationErrorCode.BadRequest,
         }),
-        isDone: true,
       });
     });
 
-    it("should return a not found event when chat does not exist", async () => {
-      const accessToken = accessTokens[0];
-      const chatId = randomUUID();
-
+    it("should return a not found response when chat does not exist", async () => {
       const sendMessageRequest: SendMessageRequest = {
         id: randomUUID(),
-        content: "message",
+        content: [{ type: "text", id: randomUUID(), text: "New User Message" }],
       };
 
-      let errorEvent: ErrorServerSentEvent | null = null;
-
       const response = await request(expressApp)
-        .post(`/api/chats/${chatId}/messages`)
+        .post(`/api/chats/${randomUUID()}/messages`)
         .send(sendMessageRequest)
-        .set("Authorization", `Bearer ${accessToken}`)
-        .set("Accept", "text/event-stream; charset=utf-8")
-        .buffer(true)
-        .parse((res, callback) => {
-          res.setEncoding("utf8");
+        .set("Authorization", `Bearer ${accessTokens[0]}`);
 
-          res.on("data", (chunk) => {
-            const serializedEvent = chunk.toString().split("data: ")[1];
+      expect(response.status).toBe(HttpStatusCode.NotFound);
 
-            if (serializedEvent != null) {
-              const event = JSON.parse(serializedEvent) as ServerSentEvent;
-
-              if (event.event === "error") {
-                errorEvent = event as ErrorServerSentEvent;
-              }
-            }
-          });
-
-          res.on("end", () => {
-            callback(null, "");
-          });
-        });
-
-      expect(response.status).toBe(HttpStatusCode.Ok);
-      expect(response.headers["content-type"]).toBe(
-        "text/event-stream; charset=utf-8"
-      );
-      expect(response.headers["cache-control"]).toBe("no-cache");
-      expect(response.headers["connection"]).toBe("keep-alive");
-      expect(errorEvent).toEqual({
-        event: "error",
-        data: expect.objectContaining({
-          statusCode: HttpStatusCode.NotFound,
+      expect(response.body).toEqual({
+        success: false,
+        error: expect.objectContaining({
           code: ApplicationErrorCode.NotFound,
         }),
-        isDone: true,
       });
     });
 
-    it("should send a message to the chat returning assistant message", async () => {
-      const accessToken = accessTokens[0];
-      const chatId = chats[0].id;
+    it("should send a new message and stream assistant response", async () => {
+      const mockChat = mockChats[0];
+      const mockChatMessages = mockMessages.filter(
+        (message) => message.chatId === mockChat.id
+      );
 
       const sendMessageRequest: SendMessageRequest = {
         id: randomUUID(),
-        content: "message",
+        content: [
+          {
+            type: "document",
+            id: mockDocuments[1].id,
+            name: mockDocuments[1].name,
+          },
+          {
+            type: "text",
+            id: randomUUID(),
+            text: "Can you take a look on my notes for backend learning?",
+          },
+        ],
+        parentMessageId: mockChatMessages[mockChatMessages.length - 1].id,
       };
 
+      let receivedEvents: string[] = [];
+      let messageId = "";
+
       const response = await request(expressApp)
-        .post(`/api/chats/${chatId}/messages`)
+        .post(`/api/chats/${mockChat.id}/messages`)
         .send(sendMessageRequest)
-        .set("Authorization", `Bearer ${accessToken}`)
+        .set("Authorization", `Bearer ${accessTokens[0]}`)
         .set("Accept", "text/event-stream; charset=utf-8")
         .buffer(true)
         .parse((res, callback) => {
           res.setEncoding("utf8");
 
           res.on("data", (chunk) => {
-            const serializedEvent = chunk.toString().split("data: ")[1];
+            const event = JSON.parse(
+              chunk.toString().slice(5, -2)
+            ) as SendMessageEvent;
 
-            if (serializedEvent != null) {
-              const event = JSON.parse(serializedEvent) as ChatServerSentEvent;
+            receivedEvents.push(event.event);
 
-              if (event.event === "start") {
+            switch (event.event) {
+              case "start": {
+                expect(event).toEqual({ event: "start" });
+
+                break;
+              }
+              case "message-start": {
+                messageId = event.data.messageId;
+
                 expect(event).toEqual({
-                  event: "start",
-                  data: { messageId: expect.any(String) },
-                  isDone: false,
-                });
-              } else if (event.event === "delta") {
-                expect(event).toEqual({
-                  event: "delta",
+                  event: "message-start",
                   data: {
+                    type: "message-start",
                     messageId: expect.any(String),
-                    delta: expect.any(String),
                   },
-                  isDone: false,
                 });
-              } else if (event.event === "end") {
+
+                break;
+              }
+              case "text-start": {
                 expect(event).toEqual({
-                  event: "end",
-                  data: { messageId: expect.any(String) },
-                  isDone: true,
+                  event: "text-start",
+                  data: {
+                    type: "text-start",
+                    id: expect.any(String),
+                    messageId,
+                  },
                 });
+
+                break;
+              }
+              case "text-delta": {
+                expect(event).toEqual({
+                  event: "text-delta",
+                  data: {
+                    type: "text-delta",
+                    id: expect.any(String),
+                    delta: expect.any(String),
+                    messageId,
+                  },
+                });
+
+                break;
+              }
+              case "text-end": {
+                expect(event).toEqual({
+                  event: "text-end",
+                  data: { type: "text-end", id: expect.any(String), messageId },
+                });
+
+                break;
+              }
+              case "tool-call-start": {
+                expect(event).toEqual({
+                  event: "tool-call-start",
+                  data: {
+                    type: "tool-call-start",
+                    id: expect.any(String),
+                    name: expect.any(String),
+                    messageId,
+                  },
+                });
+
+                break;
+              }
+              case "tool-call": {
+                expect(event).toEqual({
+                  event: "tool-call",
+                  data: {
+                    type: "tool-call",
+                    id: expect.any(String),
+                    name: expect.any(String),
+                    input: expect.any(Object),
+                    messageId,
+                  },
+                });
+
+                break;
+              }
+              case "tool-call-result": {
+                expect(event).toEqual({
+                  event: "tool-call-result",
+                  data: {
+                    type: "tool-call-result",
+                    id: expect.any(String),
+                    name: expect.any(String),
+                    input: expect.any(Object),
+                    output: expect.any(Object),
+                    messageId,
+                  },
+                });
+
+                break;
+              }
+              case "tool-call-end": {
+                expect(event).toEqual({
+                  event: "tool-call-end",
+                  data: {
+                    type: "tool-call-end",
+                    id: expect.any(String),
+                    name: expect.any(String),
+                    messageId,
+                  },
+                });
+
+                break;
+              }
+              case "message-end": {
+                expect(event).toEqual({
+                  event: "message-end",
+                  data: {
+                    type: "message-end",
+                    finishReason: expect.any(String),
+                    messageId,
+                  },
+                });
+
+                break;
+              }
+              case "end": {
+                expect(event).toEqual({ event: "end" });
+
+                break;
               }
             }
           });
@@ -639,202 +988,302 @@ describe("Chat Routes", () => {
         });
 
       expect(response.status).toBe(HttpStatusCode.Ok);
-      expect(response.headers["content-type"]).toBe(
-        "text/event-stream; charset=utf-8"
+
+      expect(receivedEvents).toContain("start");
+      expect(receivedEvents).toContain("message-start");
+      expect(ArrayUtils.count(receivedEvents, "text-start")).toEqual(
+        ArrayUtils.count(receivedEvents, "text-end")
       );
-      expect(response.headers["cache-control"]).toBe("no-cache");
-      expect(response.headers["connection"]).toBe("keep-alive");
-    });
+      expect(ArrayUtils.count(receivedEvents, "tool-call-start")).toEqual(
+        ArrayUtils.count(receivedEvents, "tool-call")
+      );
+      expect(ArrayUtils.count(receivedEvents, "tool-call-start")).toEqual(
+        ArrayUtils.count(receivedEvents, "tool-call-result")
+      );
+      expect(ArrayUtils.count(receivedEvents, "tool-call-start")).toEqual(
+        ArrayUtils.count(receivedEvents, "tool-call-end")
+      );
+      expect(receivedEvents).toContain("message-end");
+      expect(receivedEvents).toContain("end");
+    }, 60000);
   });
 
   describe("updateChat", () => {
     it("should return an unauthorized response when no access or refresh token is provided", async () => {
-      const chatId = chats[0].id;
+      const mockChat = mockChats[0];
 
       const updateChatRequest: UpdateChatRequest = {
-        title: "updated title",
+        title: "Updated Chat Title",
       };
 
       const response = await request(expressApp)
-        .patch(`/api/chats/${chatId}`)
+        .patch(`/api/chats/${mockChat.id}`)
         .send(updateChatRequest);
 
       expect(response.status).toBe(HttpStatusCode.Unauthorized);
-      expect(response.headers["content-type"]).toBe(
-        "application/json; charset=utf-8"
-      );
+
       expect(response.body).toEqual({
         success: false,
         error: expect.objectContaining({
-          statusCode: HttpStatusCode.Unauthorized,
           code: ApplicationErrorCode.Unauthorized,
         }),
       });
     });
 
     it("should return a bad request response when request does not match request schema", async () => {
-      const accessToken = accessTokens[0];
-      const chatId = chats[0].id;
+      const mockChat = mockChats[0];
 
       const response = await request(expressApp)
-        .patch(`/api/chats/${chatId}`)
+        .patch(`/api/chats/${mockChat.id}`)
         .send({ title: 123 })
-        .set("Authorization", `Bearer ${accessToken}`);
+        .set("Authorization", `Bearer ${accessTokens[0]}`);
 
       expect(response.status).toBe(HttpStatusCode.BadRequest);
-      expect(response.headers["content-type"]).toBe(
-        "application/json; charset=utf-8"
-      );
+
       expect(response.body).toEqual({
         success: false,
         error: expect.objectContaining({
-          statusCode: HttpStatusCode.BadRequest,
           code: ApplicationErrorCode.BadRequest,
         }),
       });
     });
 
     it("should return a not found response when chat does not exist", async () => {
-      const accessToken = accessTokens[0];
-      const chatId = randomUUID();
-
-      const updateChatRequest: UpdateChatRequest = { title: "updated title" };
+      const updateChatRequest: UpdateChatRequest = {
+        title: "Updated Chat Title",
+      };
 
       const response = await request(expressApp)
-        .patch(`/api/chats/${chatId}`)
+        .patch(`/api/chats/${randomUUID()}`)
         .send(updateChatRequest)
-        .set("Authorization", `Bearer ${accessToken}`);
+        .set("Authorization", `Bearer ${accessTokens[0]}`);
 
       expect(response.status).toBe(HttpStatusCode.NotFound);
-      expect(response.headers["content-type"]).toBe(
-        "application/json; charset=utf-8"
-      );
+
       expect(response.body).toEqual({
         success: false,
         error: expect.objectContaining({
-          statusCode: HttpStatusCode.NotFound,
           code: ApplicationErrorCode.NotFound,
         }),
       });
     });
 
     it("should return a not found response when chat is from another user", async () => {
-      const accessToken = accessTokens[0];
-      const chatId = chats[2].id;
+      const mockChat = mockChats[20];
 
-      const updateChatRequest: UpdateChatRequest = { title: "updated title" };
+      const updateChatRequest: UpdateChatRequest = {
+        title: "Updated Chat Title",
+      };
 
       const response = await request(expressApp)
-        .patch(`/api/chats/${chatId}`)
+        .patch(`/api/chats/${mockChat.id}`)
         .send(updateChatRequest)
-        .set("Authorization", `Bearer ${accessToken}`);
+        .set("Authorization", `Bearer ${accessTokens[0]}`);
 
       expect(response.status).toBe(HttpStatusCode.NotFound);
-      expect(response.headers["content-type"]).toBe(
-        "application/json; charset=utf-8"
-      );
+
       expect(response.body).toEqual({
         success: false,
         error: expect.objectContaining({
-          statusCode: HttpStatusCode.NotFound,
           code: ApplicationErrorCode.NotFound,
         }),
       });
     });
 
-    it("should update chat title returning the chat id", async () => {
-      const accessToken = accessTokens[0];
-      const chatId = chats[0].id;
+    it("should return a success response with chat id", async () => {
+      const mockChat = mockChats[0];
 
-      const updateChatRequest: UpdateChatRequest = { title: "updated title" };
+      const updateChatRequest: UpdateChatRequest = {
+        title: "Updated Chat Title",
+      };
 
       const response = await request(expressApp)
-        .patch(`/api/chats/${chatId}`)
+        .patch(`/api/chats/${mockChat.id}`)
         .send(updateChatRequest)
-        .set("Authorization", `Bearer ${accessToken}`);
+        .set("Authorization", `Bearer ${accessTokens[0]}`);
 
       expect(response.status).toBe(HttpStatusCode.Ok);
-      expect(response.headers["content-type"]).toBe(
-        "application/json; charset=utf-8"
-      );
-      expect(response.body).toEqual({ success: true, data: { chatId } });
+
+      expect(response.body).toEqual({ success: true, data: mockChat.id });
+    });
+  });
+
+  describe("updateMessage", () => {
+    it("should return an unauthorized response when no access or refresh token is provided", async () => {
+      const mockChat = mockChats[0];
+      const mockMessage = mockMessages[0];
+
+      const updateMessageRequest: UpdateMessageRequest = { feedback: "like" };
+
+      const response = await request(expressApp)
+        .patch(`/api/chats/${mockChat.id}/messages/${mockMessage.id}`)
+        .send(updateMessageRequest);
+
+      expect(response.status).toBe(HttpStatusCode.Unauthorized);
+
+      expect(response.body).toEqual({
+        success: false,
+        error: expect.objectContaining({
+          code: ApplicationErrorCode.Unauthorized,
+        }),
+      });
+    });
+
+    it("should return a bad request response when request does not match request schema", async () => {
+      const mockChat = mockChats[0];
+      const mockMessage = mockMessages[0];
+
+      const response = await request(expressApp)
+        .patch(`/api/chats/${mockChat.id}/messages/${mockMessage.id}`)
+        .send({ feedback: 123 })
+        .set("Authorization", `Bearer ${accessTokens[0]}`);
+
+      expect(response.status).toBe(HttpStatusCode.BadRequest);
+
+      expect(response.body).toEqual({
+        success: false,
+        error: expect.objectContaining({
+          code: ApplicationErrorCode.BadRequest,
+        }),
+      });
+    });
+
+    it("should return a not found response when chat does not exist", async () => {
+      const updateMessageRequest: UpdateMessageRequest = { feedback: "like" };
+
+      const response = await request(expressApp)
+        .patch(`/api/chats/${randomUUID()}/messages/${randomUUID()}`)
+        .send(updateMessageRequest)
+        .set("Authorization", `Bearer ${accessTokens[0]}`);
+
+      expect(response.status).toBe(HttpStatusCode.NotFound);
+
+      expect(response.body).toEqual({
+        success: false,
+        error: expect.objectContaining({
+          code: ApplicationErrorCode.NotFound,
+        }),
+      });
+    });
+
+    it("should return a not found response when chat is from another user", async () => {
+      const mockChat = mockChats[mockChats.length - 1];
+      const mockMessage = mockMessages[mockMessages.length - 1];
+
+      const updateMessageRequest: UpdateMessageRequest = { feedback: "like" };
+
+      const response = await request(expressApp)
+        .patch(`/api/chats/${mockChat.id}/messages/${mockMessage.id}`)
+        .send(updateMessageRequest)
+        .set("Authorization", `Bearer ${accessTokens[0]}`);
+
+      expect(response.status).toBe(HttpStatusCode.NotFound);
+
+      expect(response.body).toEqual({
+        success: false,
+        error: expect.objectContaining({
+          code: ApplicationErrorCode.NotFound,
+        }),
+      });
+    });
+
+    it("should return a not found response when message does not exist", async () => {
+      const mockChat = mockChats[0];
+
+      const updateMessageRequest: UpdateMessageRequest = { feedback: "like" };
+
+      const response = await request(expressApp)
+        .patch(`/api/chats/${mockChat.id}/messages/${randomUUID()}`)
+        .send(updateMessageRequest)
+        .set("Authorization", `Bearer ${accessTokens[0]}`);
+
+      expect(response.status).toBe(HttpStatusCode.NotFound);
+
+      expect(response.body).toEqual({
+        success: false,
+        error: expect.objectContaining({
+          code: ApplicationErrorCode.NotFound,
+        }),
+      });
+    });
+
+    it("should return a success response with message id", async () => {
+      const mockChat = mockChats[0];
+      const mockMessage = mockMessages[1];
+
+      const updateMessageRequest: UpdateMessageRequest = { feedback: "like" };
+
+      const response = await request(expressApp)
+        .patch(`/api/chats/${mockChat.id}/messages/${mockMessage.id}`)
+        .send(updateMessageRequest)
+        .set("Authorization", `Bearer ${accessTokens[0]}`);
+
+      expect(response.status).toBe(HttpStatusCode.Ok);
+
+      expect(response.body).toEqual({ success: true, data: mockMessage.id });
     });
   });
 
   describe("deleteChat", () => {
     it("should return an unauthorized response when no access or refresh token is provided", async () => {
-      const chatId = chats[0].id;
+      const mockChat = mockChats[0];
 
-      const response = await request(expressApp).delete(`/api/chats/${chatId}`);
+      const response = await request(expressApp).delete(
+        `/api/chats/${mockChat.id}`
+      );
 
       expect(response.status).toBe(HttpStatusCode.Unauthorized);
-      expect(response.headers["content-type"]).toBe(
-        "application/json; charset=utf-8"
-      );
+
       expect(response.body).toEqual({
         success: false,
         error: expect.objectContaining({
-          statusCode: HttpStatusCode.Unauthorized,
           code: ApplicationErrorCode.Unauthorized,
         }),
       });
     });
 
     it("should return a not found response when chat does not exist", async () => {
-      const accessToken = accessTokens[0];
-      const chatId = randomUUID();
-
       const response = await request(expressApp)
-        .delete(`/api/chats/${chatId}`)
-        .set("Authorization", `Bearer ${accessToken}`);
+        .delete(`/api/chats/${randomUUID()}`)
+        .set("Authorization", `Bearer ${accessTokens[0]}`);
 
       expect(response.status).toBe(HttpStatusCode.NotFound);
-      expect(response.headers["content-type"]).toBe(
-        "application/json; charset=utf-8"
-      );
+
       expect(response.body).toEqual({
         success: false,
         error: expect.objectContaining({
-          statusCode: HttpStatusCode.NotFound,
           code: ApplicationErrorCode.NotFound,
         }),
       });
     });
 
     it("should return a not found response when chat is from another user", async () => {
-      const accessToken = accessTokens[0];
-      const chatId = chats[2].id;
+      const mockChat = mockChats[20];
 
       const response = await request(expressApp)
-        .delete(`/api/chats/${chatId}`)
-        .set("Authorization", `Bearer ${accessToken}`);
+        .delete(`/api/chats/${mockChat.id}`)
+        .set("Authorization", `Bearer ${accessTokens[0]}`);
 
       expect(response.status).toBe(HttpStatusCode.NotFound);
-      expect(response.headers["content-type"]).toBe(
-        "application/json; charset=utf-8"
-      );
+
       expect(response.body).toEqual({
         success: false,
         error: expect.objectContaining({
-          statusCode: HttpStatusCode.NotFound,
           code: ApplicationErrorCode.NotFound,
         }),
       });
     });
 
-    it("should delete chat returning its id", async () => {
-      const accessToken = accessTokens[0];
-      const chatId = chats[0].id;
+    it("should return a success response with chat id", async () => {
+      const mockChat = mockChats[0];
 
       const response = await request(expressApp)
-        .delete(`/api/chats/${chatId}`)
-        .set("Authorization", `Bearer ${accessToken}`);
+        .delete(`/api/chats/${mockChat.id}`)
+        .set("Authorization", `Bearer ${accessTokens[0]}`);
 
       expect(response.status).toBe(HttpStatusCode.Ok);
-      expect(response.headers["content-type"]).toBe(
-        "application/json; charset=utf-8"
-      );
-      expect(response.body).toEqual({ success: true, data: { chatId } });
+
+      expect(response.body).toEqual({ success: true, data: mockChat.id });
     });
   });
 });

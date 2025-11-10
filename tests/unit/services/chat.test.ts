@@ -1,42 +1,112 @@
 import { randomUUID } from "crypto";
 import { IDataContext } from "../../../src/data/data-context";
+import { IFileStorage } from "../../../src/files/file-storage";
 import { Chat } from "../../../src/models/entities/chat";
+import {
+  AssistantContentBlock,
+  AssistantMessage,
+  Message,
+  TextContentBlock,
+} from "../../../src/models/entities/message";
 import { Session } from "../../../src/models/entities/session";
-import { mapUserToDto, User } from "../../../src/models/entities/user";
+import { User } from "../../../src/models/entities/user";
+import {
+  CreateChatRequest,
+  SendMessageRequest,
+} from "../../../src/models/requests/chat";
 import { IChatRepository } from "../../../src/repositories/chat";
+import { IDocumentRepository } from "../../../src/repositories/document";
 import { IMessageRepository } from "../../../src/repositories/message";
+import { IProjectRepository } from "../../../src/repositories/project";
+import { IUserRepository } from "../../../src/repositories/user";
 import { IAssistantService } from "../../../src/services/assistant";
 import { AuthContext } from "../../../src/services/auth";
-import { ChatService, IChatService } from "../../../src/services/chat";
+import { ChatService } from "../../../src/services/chat";
 import {
   ApplicationError,
   ApplicationErrorCode,
-  HttpStatusCode,
 } from "../../../src/utils/errors";
+import { PromiseUtils } from "../../../src/utils/promises";
+import { CursorPagination } from "../../../src/utils/types";
 
 describe("ChatService", () => {
   let dataContext: jest.Mocked<IDataContext>;
+  let fileStorage: jest.Mocked<IFileStorage>;
+  let userRepository: jest.Mocked<IUserRepository>;
+  let projectRepository: jest.Mocked<IProjectRepository>;
   let chatRepository: jest.Mocked<IChatRepository>;
   let messageRepository: jest.Mocked<IMessageRepository>;
+  let documentRepository: jest.Mocked<IDocumentRepository>;
   let assistantService: jest.Mocked<IAssistantService>;
-  let chatService: IChatService;
+  let chatService: ChatService;
 
-  const user: User = {
+  const mockUser: User = {
     id: randomUUID(),
-    name: "user 1",
+    name: "User 1",
     email: "user1@example.com",
     password: "password",
-    displayName: "user",
-    customPreferences: null,
+    displayName: "User 1",
+    customPrompt: null,
+    createdAt: new Date(),
+    updatedAt: new Date(),
   };
-  const chats: Chat[] = Array.from({ length: 5 }, (_, index) => ({
+
+  const mockSession: Session = {
     id: randomUUID(),
-    title: `chat ${index + 1}`,
-    userId: user.id,
+    userId: mockUser.id,
+    expiresAt: new Date(),
+    createdAt: new Date(),
+  };
+
+  const authContext: AuthContext = {
+    session: {
+      id: mockSession.id,
+      expiresAt: mockSession.expiresAt.toISOString(),
+      userId: mockSession.userId,
+      createdAt: mockSession.createdAt!.toISOString(),
+    },
+    user: { id: mockUser.id, name: mockUser.name, email: mockUser.email },
+  };
+
+  const mockChats = Array.from({ length: 25 }, (_, index) => ({
+    id: randomUUID(),
+    title: `Chat ${index + 1}`,
+    projectId: null,
+    userId: mockUser.id,
+    createdAt: new Date(),
+    updatedAt: new Date(),
   }));
-  const userDto = mapUserToDto(user);
-  const session: Session = { id: randomUUID(), userId: userDto.id };
-  const authContext: AuthContext = { session, user: userDto };
+
+  const mockMessages: Message[] = mockChats.flatMap((chat) => {
+    const userMessageId = randomUUID();
+
+    return [
+      {
+        id: userMessageId,
+        role: "user",
+        content: [{ type: "text", id: randomUUID(), text: "User Message" }],
+        feedback: null,
+        finishReason: null,
+        parentMessageId: null,
+        chatId: chat.id,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+      {
+        id: randomUUID(),
+        role: "assistant",
+        content: [
+          { type: "text", id: randomUUID(), text: "Assistant Message" },
+        ],
+        feedback: null,
+        finishReason: "stop",
+        parentMessageId: userMessageId,
+        chatId: chat.id,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      },
+    ];
+  });
 
   beforeEach(() => {
     dataContext = {
@@ -45,6 +115,32 @@ describe("ChatService", () => {
       begin: jest.fn(),
       commit: jest.fn(),
       rollback: jest.fn(),
+    };
+
+    fileStorage = {
+      readFile: jest.fn(),
+      writeFile: jest.fn(),
+      deleteFile: jest.fn(),
+      deleteFiles: jest.fn(),
+    };
+
+    userRepository = {
+      count: jest.fn(),
+      exists: jest.fn(),
+      findAll: jest.fn(),
+      findOne: jest.fn(),
+      create: jest.fn(),
+      update: jest.fn(),
+      delete: jest.fn(),
+    };
+
+    projectRepository = {
+      exists: jest.fn(),
+      findAll: jest.fn(),
+      findOne: jest.fn(),
+      create: jest.fn(),
+      update: jest.fn(),
+      delete: jest.fn(),
     };
 
     chatRepository = {
@@ -57,31 +153,61 @@ describe("ChatService", () => {
       delete: jest.fn(),
     };
 
-    messageRepository = { findAll: jest.fn(), create: jest.fn() };
+    messageRepository = {
+      exists: jest.fn(),
+      findAll: jest.fn(),
+      create: jest.fn(),
+      update: jest.fn(),
+    };
 
-    assistantService = { validateMessage: jest.fn(), sendMessage: jest.fn() };
+    documentRepository = {
+      count: jest.fn(),
+      exists: jest.fn(),
+      findAll: jest.fn(),
+      findAny: jest.fn(),
+      findOne: jest.fn(),
+      create: jest.fn(),
+      update: jest.fn(),
+      delete: jest.fn(),
+    };
+
+    assistantService = {
+      getMode: jest.fn(),
+      generateChatTitle: jest.fn(),
+      sendMessage: jest.fn(),
+    };
 
     chatService = new ChatService(
       dataContext,
+      fileStorage,
+      userRepository,
+      projectRepository,
       chatRepository,
       messageRepository,
+      documentRepository,
       assistantService
     );
   });
 
   describe("getChats", () => {
-    it("should return all chats", async () => {
-      chatRepository.findAllPaginated.mockResolvedValue({
-        items: chats,
-        totalItems: chats.length,
-      });
+    it("should return chats paginated", async () => {
+      const cursor = new Date();
+      const limit = 10;
 
-      const response = await chatService.getChats({}, authContext);
+      const mockChatsPaginated: CursorPagination<Chat, Date> = {
+        items: mockChats.slice(0, limit),
+        totalItems: mockChats.length,
+        nextCursor: mockChats[limit].createdAt,
+      };
 
-      expect(response).toEqual({
-        chats: chats,
-        totalChats: chats.length,
-      });
+      chatRepository.findAllPaginated.mockResolvedValue(mockChatsPaginated);
+
+      const response = await chatService.getChats(
+        { cursor: cursor.toISOString(), limit: limit.toString() },
+        authContext
+      );
+
+      expect(response).toEqual(mockChatsPaginated);
     });
   });
 
@@ -95,9 +221,6 @@ describe("ChatService", () => {
         fail("Expected to throw not found error");
       } catch (error) {
         expect(error).toBeInstanceOf(ApplicationError);
-        expect((error as ApplicationError).statusCode).toBe(
-          HttpStatusCode.NotFound
-        );
         expect((error as ApplicationError).code).toBe(
           ApplicationErrorCode.NotFound
         );
@@ -105,17 +228,62 @@ describe("ChatService", () => {
     });
 
     it("should return chat", async () => {
-      const chat = chats[0];
+      const mockChat = mockChats[0];
 
-      chatRepository.findOne.mockResolvedValue(chat);
+      chatRepository.findOne.mockResolvedValue(mockChat);
 
       const response = await chatService.getChat(
-        { chatId: chat.id },
+        { chatId: mockChat.id },
         {},
         authContext
       );
 
-      expect(response).toEqual({ chat });
+      expect(response).toEqual(mockChat);
+    });
+  });
+
+  describe("getChatMessages", () => {
+    it("should throw a not found error when chat does not exist", async () => {
+      chatRepository.findOne.mockResolvedValue(null);
+
+      try {
+        await chatService.getChatMessages(
+          { chatId: randomUUID() },
+          authContext
+        );
+
+        fail("Expected to throw not found error");
+      } catch (error) {
+        expect(error).toBeInstanceOf(ApplicationError);
+        expect((error as ApplicationError).code).toBe(
+          ApplicationErrorCode.NotFound
+        );
+      }
+    });
+
+    it("should return chat message tree", async () => {
+      const mockChat = mockChats[0];
+      const mockChatMessages = mockMessages.filter(
+        (message) => message.chatId === mockChat.id
+      );
+
+      chatRepository.exists.mockResolvedValue(true);
+
+      messageRepository.findAll.mockResolvedValue(mockChatMessages);
+
+      const response = await chatService.getChatMessages(
+        { chatId: mockChat.id },
+        authContext
+      );
+
+      expect(response).toEqual({
+        latestPath: mockChatMessages.map((message) => message.id),
+        rootMessageIds: [mockChatMessages[0].id],
+        messages: {
+          [mockChatMessages[0].id]: mockChatMessages[0],
+          [mockChatMessages[1].id]: mockChatMessages[1],
+        },
+      });
     });
   });
 
@@ -131,60 +299,186 @@ describe("ChatService", () => {
         fail("Expected to throw bad request error");
       } catch (error) {
         expect(error).toBeInstanceOf(ApplicationError);
-        expect((error as ApplicationError).statusCode).toBe(
-          HttpStatusCode.BadRequest
-        );
+
         expect((error as ApplicationError).code).toBe(
           ApplicationErrorCode.BadRequest
         );
       }
     });
 
-    it("should create a new chat and send start, delta, and end events with correct data", async () => {
-      assistantService.validateMessage.mockResolvedValue(true);
+    it("should create chat and stream assistant response", async () => {
+      const request: CreateChatRequest = {
+        id: randomUUID(),
+        message: [{ type: "text", id: randomUUID(), text: "User Message" }],
+      };
 
-      const answer = "Lorem ipsum dolor sit amet, consectetur adipiscing elit.";
-      const answerChunks = answer.split(" ");
-      const expectedDeltaEventCount = answerChunks.length;
+      const mockAssistantMessage: AssistantMessage = {
+        id: randomUUID(),
+        role: "assistant",
+        content: [
+          { type: "text", id: randomUUID(), text: "Assistant Message" },
+        ],
+        feedback: null,
+        finishReason: "stop",
+        parentMessageId: randomUUID(),
+        chatId: request.id,
+      };
 
-      assistantService.sendMessage.mockResolvedValue({
-        [Symbol.asyncIterator]: async function* () {
-          for (const chunk of answerChunks) {
-            yield chunk + " ";
-            await new Promise((resolve) => setTimeout(resolve, 100));
-          }
-        },
+      const textContentBlock = mockAssistantMessage
+        .content[0] as TextContentBlock;
+
+      assistantService.sendMessage.mockImplementation(async (options) => {
+        options.onMessagePart({
+          type: "message-start",
+          messageId: mockAssistantMessage.id,
+        });
+
+        await PromiseUtils.sleep(10);
+
+        options.onMessagePart({
+          type: "text-start",
+          id: textContentBlock.id,
+          messageId: mockAssistantMessage.id,
+        });
+
+        await PromiseUtils.sleep(10);
+
+        const deltas = textContentBlock.text.split(" ");
+
+        for (let index = 0; index < deltas.length; index++) {
+          const delta = deltas[index];
+
+          options.onMessagePart({
+            type: "text-delta",
+            id: textContentBlock.id,
+            delta: index < deltas.length - 1 ? delta + " " : delta,
+            messageId: mockAssistantMessage.id,
+          });
+
+          await PromiseUtils.sleep(10);
+        }
+
+        options.onMessagePart({
+          type: "text-end",
+          id: textContentBlock.id,
+          messageId: mockAssistantMessage.id,
+        });
+
+        await PromiseUtils.sleep(10);
+
+        options.onMessagePart({
+          type: "message-end",
+          finishReason: "stop",
+          messageId: mockAssistantMessage.id,
+        });
+
+        return mockAssistantMessage;
       });
 
-      let sentStartEvent = false;
-      let sentDeltaEvent = false;
-      let deltaEventCount = 0;
-      let sentEndEvent = false;
+      let receivedEvents: string[] = [];
 
-      await chatService.createChat(
-        { id: randomUUID(), message: "message" },
-        authContext,
-        (event) => {
-          if (event.event === "start") {
-            sentStartEvent = true;
-          } else if (event.event === "delta") {
-            sentDeltaEvent = true;
-            expect(event.data.delta).toEqual(
-              answerChunks[deltaEventCount] + " "
-            );
-            deltaEventCount++;
-          } else if (event.event === "end") {
-            sentEndEvent = true;
+      const contentBlocks: AssistantContentBlock[] = [];
+      const contentBlocksMap: Map<string, AssistantContentBlock> = new Map();
+
+      await chatService.createChat(request, authContext, (event) => {
+        receivedEvents.push(event.event);
+
+        switch (event.event) {
+          case "start": {
+            expect(event).toEqual({ event: "start" });
+
+            break;
           }
+          case "message-start": {
+            expect(event).toEqual({
+              event: "message-start",
+              data: {
+                type: "message-start",
+                messageId: mockAssistantMessage.id,
+              },
+            });
 
-          expect(event.data.messageId).toEqual(expect.any(String));
+            break;
+          }
+          case "text-start": {
+            contentBlocksMap.set(event.data.id, {
+              type: "text",
+              id: event.data.id,
+              text: "",
+            });
+
+            expect(event).toEqual({
+              event: "text-start",
+              data: {
+                type: "text-start",
+                id: textContentBlock.id,
+                messageId: mockAssistantMessage.id,
+              },
+            });
+
+            break;
+          }
+          case "text-delta": {
+            const contentBlock = contentBlocksMap.get(event.data.id)!;
+
+            (contentBlock as TextContentBlock).text += event.data.delta;
+
+            expect(event).toEqual({
+              event: "text-delta",
+              data: {
+                type: "text-delta",
+                id: textContentBlock.id,
+                delta: expect.any(String),
+                messageId: mockAssistantMessage.id,
+              },
+            });
+
+            break;
+          }
+          case "text-end": {
+            const contentBlock = contentBlocksMap.get(event.data.id)!;
+
+            contentBlocks.push(contentBlock);
+
+            expect(event).toEqual({
+              event: "text-end",
+              data: {
+                type: "text-end",
+                id: textContentBlock.id,
+                messageId: mockAssistantMessage.id,
+              },
+            });
+
+            break;
+          }
+          case "message-end": {
+            expect(event).toEqual({
+              event: "message-end",
+              data: {
+                type: "message-end",
+                finishReason: mockAssistantMessage.finishReason,
+                messageId: mockAssistantMessage.id,
+              },
+            });
+
+            break;
+          }
+          case "end": {
+            expect(event).toEqual({ event: "end" });
+
+            break;
+          }
         }
-      );
+      });
 
-      expect(sentStartEvent).toBe(true);
-      expect(sentDeltaEvent).toBe(true);
-      expect(deltaEventCount).toBe(expectedDeltaEventCount);
-      expect(sentEndEvent).toBe(true);
+      expect(contentBlocks).toEqual(mockAssistantMessage.content);
+      expect(receivedEvents).toContain("start");
+      expect(receivedEvents).toContain("message-start");
+      expect(receivedEvents).toContain("text-start");
+      expect(receivedEvents).toContain("text-delta");
+      expect(receivedEvents).toContain("text-end");
+      expect(receivedEvents).toContain("message-end");
+      expect(receivedEvents).toContain("end");
     });
   });
 
@@ -201,9 +495,6 @@ describe("ChatService", () => {
         fail("Expected to throw bad request error");
       } catch (error) {
         expect(error).toBeInstanceOf(ApplicationError);
-        expect((error as ApplicationError).statusCode).toBe(
-          HttpStatusCode.BadRequest
-        );
         expect((error as ApplicationError).code).toBe(
           ApplicationErrorCode.BadRequest
         );
@@ -216,7 +507,12 @@ describe("ChatService", () => {
       try {
         await chatService.sendMessage(
           { chatId: randomUUID() },
-          { id: randomUUID(), content: "message" },
+          {
+            id: randomUUID(),
+            content: [
+              { type: "text", id: randomUUID(), text: "New User Message" },
+            ],
+          },
           authContext,
           () => {}
         );
@@ -224,63 +520,198 @@ describe("ChatService", () => {
         fail("Expected to throw not found error");
       } catch (error) {
         expect(error).toBeInstanceOf(ApplicationError);
-        expect((error as ApplicationError).statusCode).toBe(
-          HttpStatusCode.NotFound
-        );
         expect((error as ApplicationError).code).toBe(
           ApplicationErrorCode.NotFound
         );
       }
     });
 
-    it("should create a new message and send start, delta, and end events with correct data", async () => {
-      chatRepository.exists.mockResolvedValue(true);
-      assistantService.validateMessage.mockResolvedValue(true);
-      messageRepository.findAll.mockResolvedValue([]);
+    it("should create message and stream assistant response", async () => {
+      const mockChat = mockChats[0];
+      const mockChatMessages = mockMessages.filter(
+        (message) => message.chatId === mockChat.id
+      );
 
-      const answer = "Lorem ipsum dolor sit amet, consectetur adipiscing elit.";
-      const answerChunks = answer.split(" ");
-      const expectedDeltaEventCount = answerChunks.length;
+      const request: SendMessageRequest = {
+        id: randomUUID(),
+        content: [{ type: "text", id: randomUUID(), text: "New User Message" }],
+        parentMessageId: mockChatMessages[mockChatMessages.length - 1].id,
+      };
 
-      assistantService.sendMessage.mockResolvedValue({
-        [Symbol.asyncIterator]: async function* () {
-          for (const chunk of answerChunks) {
-            yield chunk + " ";
-            await new Promise((resolve) => setTimeout(resolve, 100));
-          }
-        },
+      const mockAssistantMessage: AssistantMessage = {
+        id: randomUUID(),
+        role: "assistant",
+        content: [
+          { type: "text", id: randomUUID(), text: "New Assistant Message" },
+        ],
+        feedback: null,
+        finishReason: "stop",
+        parentMessageId: request.id,
+        chatId: mockChat.id,
+      };
+
+      const textContentBlock = mockAssistantMessage
+        .content[0] as TextContentBlock;
+
+      chatRepository.findOne.mockResolvedValue(mockChat);
+
+      assistantService.sendMessage.mockImplementation(async (options) => {
+        options.onMessagePart({
+          type: "message-start",
+          messageId: mockAssistantMessage.id,
+        });
+
+        await PromiseUtils.sleep(10);
+
+        options.onMessagePart({
+          type: "text-start",
+          id: textContentBlock.id,
+          messageId: mockAssistantMessage.id,
+        });
+
+        await PromiseUtils.sleep(10);
+
+        const deltas = textContentBlock.text.split(" ");
+
+        for (let index = 0; index < deltas.length; index++) {
+          const delta = deltas[index];
+
+          options.onMessagePart({
+            type: "text-delta",
+            id: textContentBlock.id,
+            delta: index < deltas.length - 1 ? delta + " " : delta,
+            messageId: mockAssistantMessage.id,
+          });
+
+          await PromiseUtils.sleep(10);
+        }
+
+        options.onMessagePart({
+          type: "text-end",
+          id: textContentBlock.id,
+          messageId: mockAssistantMessage.id,
+        });
+
+        await PromiseUtils.sleep(10);
+
+        options.onMessagePart({
+          type: "message-end",
+          finishReason: "stop",
+          messageId: mockAssistantMessage.id,
+        });
+
+        return mockAssistantMessage;
       });
 
-      let sentStartEvent = false;
-      let sentDeltaEvent = false;
-      let deltaEventCount = 0;
-      let sentEndEvent = false;
+      let receivedEvents: string[] = [];
+
+      const contentBlocks: AssistantContentBlock[] = [];
+      const contentBlocksMap: Map<string, AssistantContentBlock> = new Map();
 
       await chatService.sendMessage(
-        { chatId: randomUUID() },
-        { id: randomUUID(), content: "message" },
+        { chatId: mockChat.id },
+        request,
         authContext,
         (event) => {
-          if (event.event === "start") {
-            sentStartEvent = true;
-          } else if (event.event === "delta") {
-            sentDeltaEvent = true;
-            expect(event.data.delta).toEqual(
-              answerChunks[deltaEventCount] + " "
-            );
-            deltaEventCount++;
-          } else if (event.event === "end") {
-            sentEndEvent = true;
-          }
+          receivedEvents.push(event.event);
 
-          expect(event.data.messageId).toEqual(expect.any(String));
+          switch (event.event) {
+            case "start": {
+              expect(event).toEqual({ event: "start" });
+
+              break;
+            }
+            case "message-start": {
+              expect(event).toEqual({
+                event: "message-start",
+                data: {
+                  type: "message-start",
+                  messageId: mockAssistantMessage.id,
+                },
+              });
+
+              break;
+            }
+            case "text-start": {
+              contentBlocksMap.set(event.data.id, {
+                type: "text",
+                id: event.data.id,
+                text: "",
+              });
+
+              expect(event).toEqual({
+                event: "text-start",
+                data: {
+                  type: "text-start",
+                  id: textContentBlock.id,
+                  messageId: mockAssistantMessage.id,
+                },
+              });
+
+              break;
+            }
+            case "text-delta": {
+              const contentBlock = contentBlocksMap.get(event.data.id)!;
+
+              (contentBlock as TextContentBlock).text += event.data.delta;
+
+              expect(event).toEqual({
+                event: "text-delta",
+                data: {
+                  type: "text-delta",
+                  id: textContentBlock.id,
+                  delta: expect.any(String),
+                  messageId: mockAssistantMessage.id,
+                },
+              });
+
+              break;
+            }
+            case "text-end": {
+              const contentBlock = contentBlocksMap.get(event.data.id)!;
+
+              contentBlocks.push(contentBlock);
+
+              expect(event).toEqual({
+                event: "text-end",
+                data: {
+                  type: "text-end",
+                  id: textContentBlock.id,
+                  messageId: mockAssistantMessage.id,
+                },
+              });
+
+              break;
+            }
+            case "message-end": {
+              expect(event).toEqual({
+                event: "message-end",
+                data: {
+                  type: "message-end",
+                  finishReason: mockAssistantMessage.finishReason,
+                  messageId: mockAssistantMessage.id,
+                },
+              });
+
+              break;
+            }
+            case "end": {
+              expect(event).toEqual({ event: "end" });
+
+              break;
+            }
+          }
         }
       );
 
-      expect(sentStartEvent).toBe(true);
-      expect(sentDeltaEvent).toBe(true);
-      expect(deltaEventCount).toBe(expectedDeltaEventCount);
-      expect(sentEndEvent).toBe(true);
+      expect(contentBlocks).toEqual(mockAssistantMessage.content);
+      expect(receivedEvents).toContain("start");
+      expect(receivedEvents).toContain("message-start");
+      expect(receivedEvents).toContain("text-start");
+      expect(receivedEvents).toContain("text-delta");
+      expect(receivedEvents).toContain("text-end");
+      expect(receivedEvents).toContain("message-end");
+      expect(receivedEvents).toContain("end");
     });
   });
 
@@ -296,9 +727,6 @@ describe("ChatService", () => {
         fail("Expected to throw bad request error");
       } catch (error) {
         expect(error).toBeInstanceOf(ApplicationError);
-        expect((error as ApplicationError).statusCode).toBe(
-          HttpStatusCode.BadRequest
-        );
         expect((error as ApplicationError).code).toBe(
           ApplicationErrorCode.BadRequest
         );
@@ -318,27 +746,24 @@ describe("ChatService", () => {
         fail("Expected to throw not found error");
       } catch (error) {
         expect(error).toBeInstanceOf(ApplicationError);
-        expect((error as ApplicationError).statusCode).toBe(
-          HttpStatusCode.NotFound
-        );
         expect((error as ApplicationError).code).toBe(
           ApplicationErrorCode.NotFound
         );
       }
     });
 
-    it("should update chat title and return its id when chat exists", async () => {
-      const chat = chats[0];
+    it("should update chat title and return its id", async () => {
+      const mockChat = mockChats[0];
 
       chatRepository.exists.mockResolvedValue(true);
 
       const response = await chatService.updateChat(
-        { chatId: chat.id },
-        { title: "chat 1 updated" },
+        { chatId: mockChat.id },
+        { title: "Updated Chat Title" },
         authContext
       );
 
-      expect(response).toEqual({ chatId: chat.id });
+      expect(response).toEqual(mockChat.id);
     });
   });
 
@@ -352,26 +777,25 @@ describe("ChatService", () => {
         fail("Expected to throw not found error");
       } catch (error) {
         expect(error).toBeInstanceOf(ApplicationError);
-        expect((error as ApplicationError).statusCode).toBe(
-          HttpStatusCode.NotFound
-        );
         expect((error as ApplicationError).code).toBe(
           ApplicationErrorCode.NotFound
         );
       }
     });
 
-    it("should delete chat and return its id when chat exists", async () => {
-      const chat = chats[0];
+    it("should delete chat and return its id", async () => {
+      const mockChat = mockChats[0];
 
       chatRepository.exists.mockResolvedValue(true);
 
+      documentRepository.findAll.mockResolvedValue([]);
+
       const response = await chatService.deleteChat(
-        { chatId: chat.id },
+        { chatId: mockChat.id },
         authContext
       );
 
-      expect(response).toEqual({ chatId: chat.id });
+      expect(response).toEqual(mockChat.id);
     });
   });
 });
