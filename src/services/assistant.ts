@@ -34,6 +34,7 @@ import { IOpenAiModelUsageRepository } from "../repositories/open-ai-model-usage
 import { StringUtils } from "../utils/strings";
 import { AiService } from "./ai";
 import { MockAssistantService } from "./assistant-mock";
+import { ILogger } from "./logger";
 
 export type AssistantMode = "open-ai" | "mock";
 
@@ -60,6 +61,7 @@ export class AssistantService implements IAssistantService {
   private readonly openAiModelUsageRepository: IOpenAiModelUsageRepository;
   private readonly mockAssistantService: MockAssistantService;
   private readonly aiService: AiService;
+  private readonly logger: ILogger;
 
   constructor(
     fileStorage: IFileStorage,
@@ -67,7 +69,8 @@ export class AssistantService implements IAssistantService {
     documentChunkRepository: IDocumentChunkRepository,
     openAiModelUsageRepository: IOpenAiModelUsageRepository,
     mockAssistantService: MockAssistantService,
-    aiService: AiService
+    aiService: AiService,
+    logger: ILogger
   ) {
     this.fileStorage = fileStorage;
     this.documentRepository = documentRepository;
@@ -75,6 +78,7 @@ export class AssistantService implements IAssistantService {
     this.openAiModelUsageRepository = openAiModelUsageRepository;
     this.mockAssistantService = mockAssistantService;
     this.aiService = aiService;
+    this.logger = logger;
   }
 
   async getMode(): Promise<AssistantMode> {
@@ -717,7 +721,7 @@ Use these tools proactively when users ask about uploaded documents.
 
       return { success: true, data: document.id };
     } catch (error) {
-      console.error("ERROR PROCESSING DOCUMENT: ", error);
+      this.logger.error("Error processing document: ", error);
 
       return { success: false, error: (error as Error).message };
     }
@@ -774,6 +778,8 @@ Use these tools proactively when users ask about uploaded documents.
 
       return { success: true, data };
     } catch (error) {
+      this.logger.error("Error reading document: ", error);
+
       return { success: false, error: (error as Error).message };
     }
   }
@@ -892,7 +898,7 @@ Use these tools proactively when users ask about uploaded documents.
         await this.openAiModelUsageRepository.update(openAiModelUsage);
       }
     } catch (error) {
-      console.error("Error updating Open AI model usage:", error);
+      this.logger.error("Error registering OpenAI model usage: ", error);
     }
   }
 }

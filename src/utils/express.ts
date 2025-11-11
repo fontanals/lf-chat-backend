@@ -139,7 +139,16 @@ export function sseRequestHandler(
         return next(error);
       }
 
-      console.error("ERROR: ", error);
+      const logger = serviceContainer.get("Logger");
+
+      logger.error("SSE Stream Error", error, {
+        method: req.method,
+        url: req.url,
+        authContext: req.authContext,
+        params: req.params,
+        query: req.query,
+        body: req.body,
+      });
 
       const appliationError =
         error instanceof ApplicationError

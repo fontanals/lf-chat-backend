@@ -1,16 +1,30 @@
 import { ErrorRequestHandler } from "express";
 import { errorResponse } from "../models/responses/response";
 import { ApplicationError } from "../utils/errors";
+import { IServiceProvider } from "../service-provider";
 
-export const errorMiddleware: ErrorRequestHandler = (error, req, res, next) => {
-  // console.error("ERROR: ", error);
+export function errorMiddleware(
+  servives: IServiceProvider
+): ErrorRequestHandler {
+  return (error, req, res, next) => {
+    const logger = servives.get("Logger");
 
-  const applicationError =
-    error instanceof ApplicationError
-      ? error
-      : ApplicationError.internalServerError();
+    logger.error("API Error", error, {
+      method: req.method,
+      url: req.url,
+      authContext: req.authContext,
+      params: req.params,
+      query: req.query,
+      body: req.body,
+    });
 
-  const response = errorResponse(applicationError);
+    const applicationError =
+      error instanceof ApplicationError
+        ? error
+        : ApplicationError.internalServerError();
 
-  res.status(applicationError.getStatusCode()).json(response);
-};
+    const response = errorResponse(applicationError);
+
+    res.status(applicationError.getStatusCode()).json(response);
+  };
+}

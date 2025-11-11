@@ -13,7 +13,6 @@ import { createDocumentRoutes } from "./routes/documents";
 import { createProjectRoutes } from "./routes/projects";
 import { createUserRoutes } from "./routes/user";
 import { registerServices, ServiceContainer } from "./service-provider";
-import { NumberUtils } from "./utils/numbers";
 
 export class Application {
   private readonly server: Server;
@@ -44,15 +43,13 @@ export class Application {
 
     this.setupRoutes(expressApp);
 
-    expressApp.use(errorMiddleware);
+    expressApp.use(errorMiddleware(this.serviceContainer));
 
-    this.server = expressApp.listen(
-      NumberUtils.safeParseInt(config.PORT, 3000),
-      "0.0.0.0",
-      () => {
-        console.log(`Server running on http://localhost:${config.PORT}/api`);
-      }
-    );
+    this.server = expressApp.listen(config.PORT, "0.0.0.0", () => {
+      const logger = this.serviceContainer.get("Logger");
+
+      logger.info(`Server running on http://localhost:${config.PORT}/api`);
+    });
   }
 
   async end() {
@@ -72,10 +69,6 @@ export class Application {
   private setupRoutes(expressApp: Express) {
     expressApp.get("/api", (_, res) => {
       res.json({ title: "AI Chat API", version: "1.0.0" });
-    });
-
-    expressApp.get("/api/health", (_, res) => {
-      res.json({ status: "ok" });
     });
 
     expressApp.use("/api", createAuthRoutes(this.serviceContainer));

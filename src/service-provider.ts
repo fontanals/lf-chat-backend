@@ -30,10 +30,12 @@ import { DocumentService, IDocumentService } from "./services/document";
 import { IProjectService, ProjectService } from "./services/project";
 import { IUserService, UserService } from "./services/user";
 import { MockAssistantService } from "./services/assistant-mock";
+import { ILogger, Logger } from "./services/logger";
 
 type ServiceMap = {
   DataContext: IDataContext;
   FileStorage: IFileStorage;
+  Logger: ILogger;
   UserRepository: IUserRepository;
   SessionRepository: ISessionRepository;
   RefreshTokenRepository: IRefreshTokenRepository;
@@ -155,6 +157,11 @@ export function registerServices(services: ServiceContainer, pool: Pool) {
   });
 
   services.register({
+    identifier: "Logger",
+    factory: () => new Logger(),
+  });
+
+  services.register({
     identifier: "UserRepository",
     factory: (services) => new UserRepository(services.get("DataContext")),
   });
@@ -238,7 +245,8 @@ export function registerServices(services: ServiceContainer, pool: Pool) {
         services.get("DocumentChunkRepository"),
         services.get("OpenAiModelUsageRepository"),
         services.get("MockAssistantService"),
-        aiService
+        aiService,
+        services.get("Logger")
       ),
   });
 

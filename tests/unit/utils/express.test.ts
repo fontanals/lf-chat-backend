@@ -4,6 +4,7 @@ import z from "zod";
 import { SendMessageEvent } from "../../../src/models/responses/chat";
 import { successResponse } from "../../../src/models/responses/response";
 import { ServiceContainer } from "../../../src/service-provider";
+import { ILogger } from "../../../src/services/logger";
 import { ApplicationError } from "../../../src/utils/errors";
 import {
   getQueryDate,
@@ -19,13 +20,19 @@ import { ServerSentEvent } from "../../../src/utils/types";
 
 describe("Express Utils", () => {
   let serviceContainer: jest.Mocked<ServiceContainer>;
+  let logger: jest.Mocked<ILogger>;
   let request: jest.Mocked<Request>;
   let response: jest.Mocked<Response>;
 
   beforeEach(() => {
     serviceContainer = {
+      get: jest.fn(),
       createScope: jest.fn(),
     } as unknown as jest.Mocked<ServiceContainer>;
+
+    logger = { info: jest.fn(), warn: jest.fn(), error: jest.fn() };
+
+    serviceContainer.get.mockReturnValue(logger);
 
     request = {} as unknown as jest.Mocked<Request>;
 

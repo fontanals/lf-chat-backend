@@ -1,5 +1,6 @@
 node_modules
 .env
 .env.test
-uploads
 .vscode
+logs
+docker-compose.override.yml

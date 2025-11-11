@@ -5,7 +5,13 @@ dotenv.config({ path: process.env.NODE_ENV === "test" ? ".env.test" : ".env" });
 
 export const config = z
   .object({
-    PORT: z.string(),
+    PORT: z
+      .string()
+      .transform((value) => parseInt(value))
+      .refine((value) => !isNaN(value), {
+        message: "PORT must be a valid integer",
+      }),
+    LOGS_PATH: z.string(),
     POSTGRES_HOST: z.string(),
     POSTGRES_PORT: z
       .string()
