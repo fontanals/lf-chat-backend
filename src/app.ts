@@ -4,6 +4,7 @@ import { Express, json } from "express";
 import rateLimit from "express-rate-limit";
 import { Server } from "node:http";
 import { Pool } from "pg";
+import swaggerUi from "swagger-ui-express";
 import { config } from "./config";
 import { authMiddleware } from "./middlewares/auth";
 import { errorMiddleware } from "./middlewares/error";
@@ -13,6 +14,7 @@ import { createDocumentRoutes } from "./routes/documents";
 import { createProjectRoutes } from "./routes/projects";
 import { createUserRoutes } from "./routes/user";
 import { registerServices, ServiceContainer } from "./service-provider";
+import { swaggerSpec } from "./docs/swagger";
 
 export class Application {
   private readonly server: Server;
@@ -48,7 +50,10 @@ export class Application {
     this.server = expressApp.listen(config.PORT, "0.0.0.0", () => {
       const logger = this.serviceContainer.get("Logger");
 
-      logger.info(`Server running on http://localhost:${config.PORT}/api`);
+      logger.info(`HTTP Server running at http://localhost:${config.PORT}/api`);
+      logger.info(
+        `Swagger docs available at http://localhost:${config.PORT}/api/docs`
+      );
     });
   }
 
@@ -96,5 +101,7 @@ export class Application {
       authMiddleware(this.serviceContainer),
       createDocumentRoutes(this.serviceContainer)
     );
+
+    expressApp.use("/api/docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
   }
 }

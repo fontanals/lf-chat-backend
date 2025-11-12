@@ -140,7 +140,7 @@ EXECUTE FUNCTION set_updated_at();
 INSERT INTO "user"
 (id, name, email, password, display_name, custom_prompt)
 VALUES
-(gen_random_uuid(), 'Demo User', 'demo@ai-chat.com', '$2b$10$NOARcGh.tPYQTLgSi23kjuiHJNHFxC7diXdMt2JT0rcyX4Pctt3L2', 'Demo', '');
+(gen_random_uuid(), 'Demo User', 'demo@lf-chat.com', '$2b$10$NOARcGh.tPYQTLgSi23kjuiHJNHFxC7diXdMt2JT0rcyX4Pctt3L2', 'Demo', '');
 
 INSERT INTO "open_ai_model_usage"
 (model, input_tokens, output_tokens, total_tokens)

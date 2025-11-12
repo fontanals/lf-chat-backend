@@ -38,7 +38,7 @@ export class Logger {
         new transports.Console({ level: "debug" }),
         new transports.DailyRotateFile({
           level: "info",
-          filename: `${config.LOGS_PATH}/ai-chat-%DATE%.log`,
+          filename: `${config.LOGS_PATH}/lf-chat-%DATE%.log`,
           datePattern: "YYYY-MM-DD",
           zippedArchive: true,
           maxSize: "5m",
