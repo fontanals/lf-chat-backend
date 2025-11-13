@@ -6,15 +6,16 @@ import { Server } from "node:http";
 import { Pool } from "pg";
 import swaggerUi from "swagger-ui-express";
 import { config } from "./config";
+import { swaggerSpec } from "./docs/swagger";
 import { authMiddleware } from "./middlewares/auth";
 import { errorMiddleware } from "./middlewares/error";
 import { createAuthRoutes } from "./routes/auth";
 import { createChatRoutes } from "./routes/chats";
 import { createDocumentRoutes } from "./routes/documents";
 import { createProjectRoutes } from "./routes/projects";
+import { createTestRoutes } from "./routes/test";
 import { createUserRoutes } from "./routes/user";
 import { registerServices, ServiceContainer } from "./service-provider";
-import { swaggerSpec } from "./docs/swagger";
 
 export class Application {
   private readonly server: Server;
@@ -101,6 +102,10 @@ export class Application {
       authMiddleware(this.serviceContainer),
       createDocumentRoutes(this.serviceContainer)
     );
+
+    if (config.NODE_ENV === "test") {
+      expressApp.use("/api/__test__", createTestRoutes(this.serviceContainer));
+    }
 
     expressApp.use("/api/docs", swaggerUi.serve, swaggerUi.setup(swaggerSpec));
   }

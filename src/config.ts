@@ -5,6 +5,7 @@ dotenv.config({ path: process.env.NODE_ENV === "test" ? ".env.test" : ".env" });
 
 export const config = z
   .object({
+    NODE_ENV: z.enum(["development", "production", "test"]),
     PORT: z
       .string()
       .transform((value) => parseInt(value))

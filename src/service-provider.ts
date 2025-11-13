@@ -24,13 +24,14 @@ import { ISessionRepository, SessionRepository } from "./repositories/session";
 import { IUserRepository, UserRepository } from "./repositories/user";
 import { aiService } from "./services/ai";
 import { AssistantService, IAssistantService } from "./services/assistant";
+import { MockAssistantService } from "./services/assistant-mock";
 import { AuthService, IAuthService } from "./services/auth";
 import { ChatService, IChatService } from "./services/chat";
 import { DocumentService, IDocumentService } from "./services/document";
-import { IProjectService, ProjectService } from "./services/project";
-import { IUserService, UserService } from "./services/user";
-import { MockAssistantService } from "./services/assistant-mock";
 import { ILogger, Logger } from "./services/logger";
+import { IProjectService, ProjectService } from "./services/project";
+import { ITestService, TestService } from "./services/test";
+import { IUserService, UserService } from "./services/user";
 
 type ServiceMap = {
   DataContext: IDataContext;
@@ -52,6 +53,7 @@ type ServiceMap = {
   ProjectService: IProjectService;
   ChatService: IChatService;
   DocumentService: IDocumentService;
+  TestService: ITestService;
 };
 
 type ServiceIdentifier = keyof ServiceMap;
@@ -281,6 +283,18 @@ export function registerServices(services: ServiceContainer, pool: Pool) {
       new DocumentService(
         services.get("DataContext"),
         services.get("FileStorage"),
+        services.get("DocumentRepository")
+      ),
+  });
+
+  services.register({
+    identifier: "TestService",
+    factory: (services) =>
+      new TestService(
+        services.get("DataContext"),
+        services.get("FileStorage"),
+        services.get("ChatRepository"),
+        services.get("MessageRepository"),
         services.get("DocumentRepository")
       ),
   });
