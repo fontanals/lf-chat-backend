@@ -1,4 +1,4 @@
-name: lf_chat_test
+name: lf_chat_backend_test
 services:
   api:
     container_name: lf_chat_api_test
@@ -10,6 +10,9 @@ services:
     command: npm run dev:test
     env_file:
       - .env.test
+    environment:
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
     volumes:
       - .:/app
       - /app/node_modules

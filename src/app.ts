@@ -27,9 +27,7 @@ export class Application {
 
     registerServices(this.serviceContainer, pool);
 
-    expressApp.use(
-      cors({ origin: "http://localhost:5173", credentials: true })
-    );
+    expressApp.use(cors({ origin: config.CORS_ORIGINS, credentials: true }));
     expressApp.use(cookieParser());
     expressApp.use(json());
 

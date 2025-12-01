@@ -1,4 +1,4 @@
-name: lf_chat_dev
+name: lf_chat_backend_dev
 services:
   api:
     container_name: lf_chat_api
@@ -10,6 +10,9 @@ services:
     command: npm run dev
     env_file:
       - .env
+    environment:
+      - POSTGRES_HOST=postgres
+      - POSTGRES_PORT=5432
     volumes:
       - .:/app
       - /app/node_modules

@@ -46,6 +46,7 @@ REST API for an AI chat application similar to ChatGPT and Claude.ai. Users can 
 | --------------------------------------- | ----------------------------------------------------------------------------------- |
 | `PORT`                                  | Server port                                                                         |
 | `LOGS_PATH`                             | Directory for log files                                                             |
+| `CORS_ORIGINS`                          | CORS origin addresses as CSV                                                        |
 | `POSTGRES_HOST`                         | PostgreSQL host                                                                     |
 | `POSTGRES_PORT`                         | PostgreSQL port                                                                     |
 | `POSTGRES_USER`                         | PostgreSQL user                                                                     |

@@ -13,6 +13,9 @@ export const config = z
         message: "PORT must be a valid integer",
       }),
     LOGS_PATH: z.string(),
+    CORS_ORIGINS: z
+      .string()
+      .transform((value) => value.split(",").map((origin) => origin.trim())),
     POSTGRES_HOST: z.string(),
     POSTGRES_PORT: z
       .string()
