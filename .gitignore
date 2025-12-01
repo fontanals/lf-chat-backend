@@ -1,6 +1,10 @@
 node_modules
+dist
 .env
 .env.test
-.vscode
+.env.prod
 logs
-docker-compose.override.yml
+*.log
+.DS_Store
+.vscode
+.git

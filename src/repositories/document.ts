@@ -15,6 +15,7 @@ export interface IDocumentRepository {
   create(document: Document): Promise<void>;
   update(id: string, document: NullablePartial<Document>): Promise<void>;
   delete(id: string): Promise<void>;
+  getAllUserChatDocuments(userId: string): Promise<Document[]>;
 }
 
 export class DocumentRepository implements IDocumentRepository {
@@ -266,5 +267,30 @@ export class DocumentRepository implements IDocumentRepository {
         id = $1;`,
       [id]
     );
+  }
+
+  async getAllUserChatDocuments(userId: string): Promise<Document[]> {
+    const result = await this.dataContext.query<Document>(
+      `SELECT
+        id,
+        key,
+        name,
+        mimetype,
+        size_in_bytes AS "sizeInBytes",
+        is_processed AS "isProcessed",
+        chat_id AS "chatId",
+        project_id AS "projectId",
+        user_id AS "userId",
+        created_at AS "createdAt",
+        updated_at AS "updatedAt"
+      FROM "document"
+      WHERE
+        chat_id IS NOT NULL AND
+        user_id = $1
+      ORDER BY created_at;`,
+      [userId]
+    );
+
+    return result.rows;
   }
 }

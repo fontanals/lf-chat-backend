@@ -9,7 +9,10 @@ import { User } from "../../../src/models/entities/user";
 import { IServiceProvider } from "../../../src/service-provider";
 import { AuthContext, IAuthService } from "../../../src/services/auth";
 import { refreshTokenCookieName } from "../../../src/utils/constants";
-import { ApplicationErrorCode } from "../../../src/utils/errors";
+import {
+  ApplicationError,
+  ApplicationErrorCode,
+} from "../../../src/utils/errors";
 
 describe("authMiddleware", () => {
   let services: jest.Mocked<IServiceProvider>;
@@ -24,6 +27,9 @@ describe("authMiddleware", () => {
     password: "password",
     displayName: "User 1",
     customPrompt: null,
+    verificationToken: null,
+    recoveryToken: null,
+    isVerified: true,
     createdAt: addDays(new Date(), -100),
     updatedAt: addDays(new Date(), -100),
   };
@@ -48,8 +54,11 @@ describe("authMiddleware", () => {
   beforeEach(() => {
     authService = {
       signup: jest.fn(),
+      verifyAccount: jest.fn(),
       signin: jest.fn(),
       signout: jest.fn(),
+      recoverPassword: jest.fn(),
+      resetPassword: jest.fn(),
       validateAccessToken: jest.fn(),
       refreshToken: jest.fn(),
     };
@@ -92,7 +101,7 @@ describe("authMiddleware", () => {
 
     authService.validateAccessToken.mockReturnValue({
       isValid: true,
-      authContext,
+      payload: authContext,
     });
 
     request.headers = { authorization: `Bearer ${accessToken}` };
@@ -112,7 +121,7 @@ describe("authMiddleware", () => {
     request.headers = {};
     request.cookies = { refreshToken: "token" };
 
-    authService.refreshToken.mockResolvedValue({ isValid: false });
+    authService.refreshToken.mockRejectedValue(ApplicationError.unauthorized());
 
     const next = jest.fn();
 
@@ -150,7 +159,6 @@ describe("authMiddleware", () => {
     );
 
     authService.refreshToken.mockResolvedValue({
-      isValid: true,
       accessToken: newAccessToken,
       refreshToken: newRefreshToken,
       authContext,

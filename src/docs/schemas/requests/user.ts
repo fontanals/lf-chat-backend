@@ -21,23 +21,6 @@ const UpdateUserRequestSchema: OpenAPIV3.SchemaObject = {
   },
 };
 
-const ChangePasswordRequestSchema: OpenAPIV3.SchemaObject = {
-  type: "object",
-  properties: {
-    currentPassword: {
-      type: "string",
-      description: "The user's current password.",
-      example: "old-password",
-    },
-    newPassword: {
-      type: "string",
-      description: "The user's new password.",
-      example: "new-strong-password",
-    },
-  },
-};
-
 export const userRequestSchemas = {
   UpdateUserRequest: UpdateUserRequestSchema,
-  ChangePasswordRequest: ChangePasswordRequestSchema,
 };

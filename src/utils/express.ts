@@ -141,23 +141,19 @@ export function sseRequestHandler(
 
       const logger = serviceContainer.get("Logger");
 
-      logger.error("SSE Stream Error", error, {
+      logger.error("SSE Stream Error: ", error, {
         method: req.method,
         url: req.url,
-        authContext: req.authContext,
-        params: req.params,
-        query: req.query,
-        body: req.body,
       });
 
-      const appliationError =
+      const applicationError =
         error instanceof ApplicationError
           ? error
           : ApplicationError.internalServerError();
 
       const event: ServerSentEvent<"error", ApplicationError> = {
         event: "error",
-        error: appliationError,
+        error: applicationError,
       };
 
       res.write(`data: ${JSON.stringify(event)}\n\n`);

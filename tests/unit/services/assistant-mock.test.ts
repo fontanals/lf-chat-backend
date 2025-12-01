@@ -14,11 +14,19 @@ describe("MockAssistantService", () => {
     mockAssistantService = new MockAssistantService();
   });
 
-  describe("getMode", () => {
+  describe("getStatus", () => {
     it("should return 'mock'", async () => {
-      const mode = await mockAssistantService.getMode();
+      const mode = await mockAssistantService.getStatus();
 
       expect(mode).toBe("mock");
+    });
+  });
+
+  describe("isContentValid", () => {
+    it("should return true", async () => {
+      const isValid = await mockAssistantService.isContentValid("");
+
+      expect(isValid).toBe(true);
     });
   });
 

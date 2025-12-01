@@ -28,20 +28,6 @@ export function createUserRoutes(serviceContainer: ServiceContainer) {
     })
   );
 
-  router.patch(
-    "/password",
-    jsonRequestHandler(serviceContainer, async (req, res, services) => {
-      const userService = services.get("UserService");
-
-      const response = await userService.changePassword(
-        req.body,
-        req.authContext
-      );
-
-      return response;
-    })
-  );
-
   router.delete(
     "/",
     jsonRequestHandler(serviceContainer, async (req, res, services) => {

@@ -1,8 +1,8 @@
-import { Project } from "../entities/project";
+import { ProjectDto } from "../entities/project";
 
-export type GetProjectsResponse = Project[];
+export type GetProjectsResponse = ProjectDto[];
 
-export type GetProjectResponse = Project;
+export type GetProjectResponse = ProjectDto;
 
 export type CreateProjectResponse = string;
 

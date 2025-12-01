@@ -1,6 +1,4 @@
 import { Router } from "express";
-import rateLimit from "express-rate-limit";
-import { config } from "../config";
 import { authMiddleware } from "../middlewares/auth";
 import { ServiceContainer } from "../service-provider";
 import {
@@ -12,52 +10,27 @@ import { jsonRequestHandler } from "../utils/express";
 export function createAuthRoutes(serviceContainer: ServiceContainer) {
   const router = Router();
 
-  if (config.ENABLE_RATE_LIMITING) {
-    router.post(
-      "/signup",
-      rateLimit({
-        windowMs: config.SIGNUP_RATE_LIMIT_WINDOW_IN_MINUTES * 60 * 1000,
-        max: config.SIGNUP_RATE_LIMIT_MAX_REQUESTS,
-        message: "Too many accounts created. Please try again later.",
-      }),
-      jsonRequestHandler(serviceContainer, async (req, res, services) => {
-        const authService = services.get("AuthService");
+  router.post(
+    "/signup",
+    jsonRequestHandler(serviceContainer, async (req, res, services) => {
+      const authService = services.get("AuthService");
 
-        const { accessToken, refreshToken, response } =
-          await authService.signup(req.body);
+      const response = await authService.signup(req.body);
 
-        res
-          .header("Authorization", `Bearer ${accessToken}`)
-          .cookie(
-            refreshTokenCookieName,
-            refreshToken,
-            refreshTokenCookieOptions
-          );
+      return response;
+    })
+  );
 
-        return response;
-      })
-    );
-  } else {
-    router.post(
-      "/signup",
-      jsonRequestHandler(serviceContainer, async (req, res, services) => {
-        const authService = services.get("AuthService");
+  router.post(
+    "/verify-account",
+    jsonRequestHandler(serviceContainer, async (req, res, services) => {
+      const authService = services.get("AuthService");
 
-        const { accessToken, refreshToken, response } =
-          await authService.signup(req.body);
+      const response = await authService.verifyAccount(req.body);
 
-        res
-          .header("Authorization", `Bearer ${accessToken}`)
-          .cookie(
-            refreshTokenCookieName,
-            refreshToken,
-            refreshTokenCookieOptions
-          );
-
-        return response;
-      })
-    );
-  }
+      return response;
+    })
+  );
 
   router.post(
     "/signin",
@@ -87,6 +60,32 @@ export function createAuthRoutes(serviceContainer: ServiceContainer) {
       const authService = services.get("AuthService");
 
       const response = await authService.signout(req.authContext);
+
+      res.clearCookie(refreshTokenCookieName);
+
+      return response;
+    })
+  );
+
+  router.post(
+    "/recover-password",
+    jsonRequestHandler(serviceContainer, async (req, res, services) => {
+      const authService = services.get("AuthService");
+
+      const response = await authService.recoverPassword(req.body);
+
+      res.clearCookie(refreshTokenCookieName);
+
+      return response;
+    })
+  );
+
+  router.post(
+    "/reset-password",
+    jsonRequestHandler(serviceContainer, async (req, res, services) => {
+      const authService = services.get("AuthService");
+
+      const response = await authService.resetPassword(req.body);
 
       res.clearCookie(refreshTokenCookieName);
 

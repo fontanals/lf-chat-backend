@@ -1,6 +1,6 @@
-import { AssistantMode } from "../../services/assistant";
+import { AssistantStatus } from "../../services/assistant";
 import { CursorPagination, ServerSentEvent } from "../../utils/types";
-import { Chat } from "../entities/chat";
+import { ChatDto } from "../entities/chat";
 import {
   Message,
   MessageEndPart,
@@ -62,11 +62,11 @@ export type SendMessageEvent =
   | MessageStartEvent
   | MessageEndEvent;
 
-export type GetAssistantModeResponse = AssistantMode;
+export type GetAssistantStatusResponse = AssistantStatus;
 
-export type GetChatsResponse = CursorPagination<Chat, Date>;
+export type GetChatsResponse = CursorPagination<ChatDto, Date>;
 
-export type GetChatResponse = Chat;
+export type GetChatResponse = ChatDto;
 
 export type GetChatMessagesResponse = {
   latestPath: string[];
@@ -79,3 +79,5 @@ export type UpdateChatResponse = string;
 export type UpdateMessageResponse = string;
 
 export type DeleteChatResponse = string;
+
+export type DeleteAllChatsResponse = boolean;

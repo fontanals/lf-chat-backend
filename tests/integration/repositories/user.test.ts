@@ -16,6 +16,9 @@ describe("UserRepository", () => {
     password: "password",
     displayName: `User ${index + 1}`,
     customPrompt: null,
+    verificationToken: null,
+    recoveryToken: null,
+    isVerified: true,
     createdAt: new Date(),
     updatedAt: new Date(),
   }));
@@ -30,14 +33,6 @@ describe("UserRepository", () => {
 
   afterAll(async () => {
     await pool.end();
-  });
-
-  describe("count", () => {
-    it("should return the total number of users", async () => {
-      const count = await userRepository.count();
-
-      expect(count).toBe(mockUsers.length);
-    });
   });
 
   describe("exists", () => {
@@ -89,6 +84,9 @@ describe("UserRepository", () => {
         password: "password",
         displayName: "New User",
         customPrompt: null,
+        verificationToken: "token",
+        recoveryToken: null,
+        isVerified: false,
       };
 
       await userRepository.create(newUser);

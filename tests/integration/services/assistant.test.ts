@@ -16,6 +16,7 @@ import { OpenAiModelUsageRepository } from "../../../src/repositories/open-ai-mo
 import { aiService } from "../../../src/services/ai";
 import { AssistantService } from "../../../src/services/assistant";
 import { MockAssistantService } from "../../../src/services/assistant-mock";
+import { Logger } from "../../../src/services/logger";
 import { StringUtils } from "../../../src/utils/strings";
 import {
   createTestPool,
@@ -35,13 +36,15 @@ describe("AssistantService", () => {
   const openAiModelUsageRepository = new OpenAiModelUsageRepository(
     dataContext
   );
+  const logger = new Logger();
   const assistantService = new AssistantService(
     fileStorage,
     documentRepostory,
     documentChunkRepository,
     openAiModelUsageRepository,
     new MockAssistantService(),
-    aiService
+    aiService,
+    logger
   );
 
   const mockUser: User = {
@@ -50,6 +53,10 @@ describe("AssistantService", () => {
     email: "user1@example.com",
     password: "password",
     displayName: "User 1",
+    customPrompt: null,
+    verificationToken: null,
+    recoveryToken: null,
+    isVerified: true,
     createdAt: new Date(),
     updatedAt: new Date(),
   };

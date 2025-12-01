@@ -26,6 +26,9 @@ describe("ProjectRepository", () => {
     password: "password",
     displayName: `User ${index + 1}`,
     customPrompt: null,
+    verificationToken: null,
+    recoveryToken: null,
+    isVerified: true,
     createdAt: new Date(),
     updatedAt: new Date(),
   }));

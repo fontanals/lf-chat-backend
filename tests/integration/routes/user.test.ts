@@ -6,12 +6,11 @@ import request from "supertest";
 import { Application } from "../../../src/app";
 import { config } from "../../../src/config";
 import { User } from "../../../src/models/entities/user";
+import { UpdateUserRequest } from "../../../src/models/requests/user";
 import {
-  ChangePasswordRequest,
-  UpdateUserRequest,
-} from "../../../src/models/requests/user";
-import { ApplicationErrorCode } from "../../../src/utils/errors";
-import { HttpStatusCode } from "../../../src/utils/types";
+  ApplicationErrorCode,
+  HttpStatusCode,
+} from "../../../src/utils/errors";
 import { createTestPool, insertUsers, truncateUsers } from "../../utils";
 
 describe("User Routes", () => {
@@ -26,6 +25,9 @@ describe("User Routes", () => {
     password: "password",
     displayName: "User 1",
     customPrompt: null,
+    verificationToken: null,
+    recoveryToken: null,
+    isVerified: true,
     createdAt: new Date(),
     updatedAt: new Date(),
   };
@@ -124,65 +126,6 @@ describe("User Routes", () => {
       const response = await request(expressApp)
         .patch("/api/user")
         .send(updateUserRequest)
-        .set("Authorization", `Bearer ${accessToken}`);
-
-      expect(response.status).toBe(HttpStatusCode.Ok);
-
-      expect(response.body).toEqual({ success: true, data: mockUser.id });
-    });
-  });
-
-  describe("changePassword", () => {
-    it("should return an unauthorized response when no access or refresh token is provided", async () => {
-      const changePasswordRequest: ChangePasswordRequest = {
-        currentPassword: "password",
-        newPassword: "new-password",
-      };
-
-      const response = await request(expressApp)
-        .patch("/api/user/password")
-        .send(changePasswordRequest);
-
-      expect(response.status).toBe(HttpStatusCode.Unauthorized);
-
-      expect(response.body).toEqual({
-        success: false,
-        error: expect.objectContaining({
-          code: ApplicationErrorCode.Unauthorized,
-        }),
-      });
-    });
-
-    it("should return an invalid email or passsord response when current passwor is incorrect", async () => {
-      const changePasswordRequest: ChangePasswordRequest = {
-        currentPassword: "incorrect-password",
-        newPassword: "new-password",
-      };
-
-      const response = await request(expressApp)
-        .patch("/api/user/password")
-        .send(changePasswordRequest)
-        .set("Authorization", `Bearer ${accessToken}`);
-
-      expect(response.status).toBe(HttpStatusCode.BadRequest);
-
-      expect(response.body).toEqual({
-        success: false,
-        error: expect.objectContaining({
-          code: ApplicationErrorCode.InvalidEmailOrPassword,
-        }),
-      });
-    });
-
-    it("should return a success response with the user id", async () => {
-      const changePasswordRequest: ChangePasswordRequest = {
-        currentPassword: "password",
-        newPassword: "new-password",
-      };
-
-      const response = await request(expressApp)
-        .patch("/api/user/password")
-        .send(changePasswordRequest)
         .set("Authorization", `Bearer ${accessToken}`);
 
       expect(response.status).toBe(HttpStatusCode.Ok);

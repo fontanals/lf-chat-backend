@@ -144,7 +144,7 @@ describe("Express Utils", () => {
   });
 
   describe("validateRequest", () => {
-    it("should throw bad request error when request does not match schema", () => {
+    it("should throw a bad request error when request does not match schema", () => {
       expect(() =>
         validateRequest(
           { firstName: "name" },

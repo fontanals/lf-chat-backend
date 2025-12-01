@@ -13,6 +13,7 @@ import {
 } from "../models/entities/message";
 import {
   CreateTestDataRequest,
+  GetUsersQuery,
   TestCreateChatRequest,
   TestSendMessageParams,
   TestSendMessageRequest,
@@ -21,18 +22,21 @@ import { SendMessageEvent } from "../models/responses/chat";
 import {
   ClearTestDataResponse,
   CreateTestDataResponse,
+  GetUsersResponse,
 } from "../models/responses/test";
 import { IChatRepository } from "../repositories/chat";
 import { IDocumentRepository } from "../repositories/document";
 import { IMessageRepository } from "../repositories/message";
+import { IUserRepository } from "../repositories/user";
 import { ArrayUtils } from "../utils/arrays";
 import { ApplicationError } from "../utils/errors";
-import { validateRequest } from "../utils/express";
+import { getQueryString, validateRequest } from "../utils/express";
 import { PromiseUtils } from "../utils/promises";
 import { SqlUtils } from "../utils/sql";
 import { AuthContext } from "./auth";
 
 export interface ITestService {
+  getUsers(query: GetUsersQuery): Promise<GetUsersResponse>;
   createTestData(
     request: CreateTestDataRequest
   ): Promise<CreateTestDataResponse>;
@@ -52,6 +56,7 @@ export interface ITestService {
 export class TestService implements ITestService {
   private readonly dataContext: IDataContext;
   private readonly fileStorage: IFileStorage;
+  private readonly userRepository: IUserRepository;
   private readonly chatRepository: IChatRepository;
   private readonly messageRepository: IMessageRepository;
   private readonly documentRepository: IDocumentRepository;
@@ -59,15 +64,25 @@ export class TestService implements ITestService {
   constructor(
     dataContext: IDataContext,
     fileStorage: IFileStorage,
+    userRepository: IUserRepository,
     chatRepository: IChatRepository,
     messageRepository: IMessageRepository,
     documentRepository: IDocumentRepository
   ) {
     this.dataContext = dataContext;
     this.fileStorage = fileStorage;
+    this.userRepository = userRepository;
     this.chatRepository = chatRepository;
     this.messageRepository = messageRepository;
     this.documentRepository = documentRepository;
+  }
+
+  async getUsers(query: GetUsersQuery): Promise<GetUsersResponse> {
+    const email = getQueryString(query.email);
+
+    const users = await this.userRepository.findAll({ email });
+
+    return users;
   }
 
   async createTestData(
@@ -83,9 +98,9 @@ export class TestService implements ITestService {
 
         await this.dataContext.execute(
           `INSERT INTO "user"
-          (id, name, email, password, display_name, custom_prompt, created_at, updated_at)
+          (id, name, email, password, display_name, custom_prompt, verification_token, recovery_token, is_verified, created_at, updated_at)
           VALUES
-          ${SqlUtils.values(request.users!.length, 8)};`,
+          ${SqlUtils.values(request.users!.length, 11)};`,
           request.users!.flatMap((user) => [
             user.id,
             user.name,
@@ -93,6 +108,9 @@ export class TestService implements ITestService {
             user.password,
             user.displayName,
             user.customPrompt,
+            user.verificationToken,
+            user.recoveryToken,
+            user.isVerified,
             user.createdAt,
             user.updatedAt,
           ])
@@ -142,7 +160,7 @@ export class TestService implements ITestService {
           request.messages!.flatMap((message) => [
             message.id,
             message.role,
-            message.content,
+            JSON.stringify(message.content),
             message.feedback,
             message.finishReason,
             message.parentMessageId,
@@ -206,7 +224,11 @@ export class TestService implements ITestService {
         id: z.string(),
         message: z.array(
           z.discriminatedUnion("type", [
-            z.object({ type: z.literal("text"), text: z.string() }),
+            z.object({
+              type: z.literal("text"),
+              id: z.string(),
+              text: z.string(),
+            }),
             z.object({
               type: z.literal("document"),
               id: z.string(),
@@ -215,7 +237,6 @@ export class TestService implements ITestService {
           ])
         ),
         projectId: z.string().nullable().optional(),
-        userId: z.string(),
       })
     );
 
@@ -280,7 +301,6 @@ export class TestService implements ITestService {
           ])
         ),
         parentMessageId: z.string().nullable().optional(),
-        userId: z.string(),
       })
     );
 
@@ -294,7 +314,7 @@ export class TestService implements ITestService {
       id: request.id,
       role: "user",
       content: request.content,
-      parentMessageId: null,
+      parentMessageId: request.parentMessageId,
       chatId: chat.id,
     };
 
@@ -360,7 +380,19 @@ export class TestService implements ITestService {
       });
 
       if (document == null) {
-        throw ApplicationError.badRequest();
+        assistantMessage.finishReason = "error";
+
+        onSendEvent({
+          event: "message-end",
+          data: {
+            type: "message-end",
+            finishReason: "error",
+            error: "Document not found.",
+            messageId: assistantMessage.id,
+          },
+        });
+
+        return assistantMessage;
       }
 
       if (!document.isProcessed) {
@@ -539,7 +571,7 @@ export class TestService implements ITestService {
     const textContentBlock: TextContentBlock = {
       type: "text",
       id: randomUUID(),
-      text: "Lorem ipsum dolor sit amet consectetur adipisicing elit. Voluptatibus fugiat non nulla asperiores molestias, doloremque dolorum nostrum ea quis quasi dicta delectus, omnis sequi, reiciendis quidem voluptatem nesciunt ex? Rerum, quo sit beatae officia provident molestias praesentium aut maiores obcaecati non dolore sint, hic impedit totam dolores consectetur labore ab vel a deserunt distinctio voluptas commodi! Illum tenetur veritatis, commodi eveniet fuga magnam. Expedita laborum aliquam architecto labore tempora cumque consequatur libero inventore, debitis sit. Recusandae ex esse officiis inventore eum quibusdam fugiat, minus labore aut suscipit impedit fuga error voluptatem repellendus, itaque maiores assumenda eius a velit provident perferendis!",
+      text: "Lorem ipsum dolor sit amet consectetur adipisicing elit. Voluptatibus fugiat non nulla asperiores molestias, doloremque dolorum nostrum ea quis quasi dicta delectus, omnis sequi, reiciendis quidem voluptatem nesciunt ex? Rerum, quo sit beatae officia provident molestias praesentium aut maiores obcaecati non dolore sint, hic impedit totam dolores consectetur labore ab vel a deserunt distinctio voluptas commodi!",
     };
 
     assistantMessage.content.push(textContentBlock);

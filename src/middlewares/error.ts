@@ -1,7 +1,7 @@
 import { ErrorRequestHandler } from "express";
 import { errorResponse } from "../models/responses/response";
-import { ApplicationError } from "../utils/errors";
 import { IServiceProvider } from "../service-provider";
+import { ApplicationError } from "../utils/errors";
 
 export function errorMiddleware(
   servives: IServiceProvider
@@ -9,14 +9,7 @@ export function errorMiddleware(
   return (error, req, res, next) => {
     const logger = servives.get("Logger");
 
-    logger.error("API Error", error, {
-      method: req.method,
-      url: req.url,
-      authContext: req.authContext,
-      params: req.params,
-      query: req.query,
-      body: req.body,
-    });
+    logger.error("API Error: ", error, { method: req.method, url: req.url });
 
     const applicationError =
       error instanceof ApplicationError

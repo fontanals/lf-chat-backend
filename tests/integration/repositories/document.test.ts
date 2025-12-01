@@ -1,4 +1,5 @@
 import { randomUUID } from "crypto";
+import { addDays } from "date-fns";
 import { DataContext } from "../../../src/data/data-context";
 import { Chat } from "../../../src/models/entities/chat";
 import { Document } from "../../../src/models/entities/document";
@@ -20,38 +21,59 @@ describe("DocumentRepository", () => {
   const dataContext = new DataContext(pool);
   const documentRepository = new DocumentRepository(dataContext);
 
-  const mockUser: User = {
+  const mockUsers: User[] = Array.from({ length: 5 }, (_, index) => ({
     id: randomUUID(),
-    name: "User 1",
-    email: "user1@example.com",
+    name: `User ${index + 1}`,
+    email: `user${index + 1}@example.com`,
     password: "password",
-    displayName: "User 1",
+    displayName: `User ${index + 1}`,
     customPrompt: null,
-    createdAt: new Date(),
-    updatedAt: new Date(),
-  };
-
-  const mockProjects: Project[] = Array.from({ length: 5 }, (_, index) => ({
-    id: randomUUID(),
-    title: `Project ${index + 1}`,
-    description: `Project ${index + 1} Description`,
-    userId: mockUser.id,
+    verificationToken: null,
+    recoveryToken: null,
+    isVerified: true,
     createdAt: new Date(),
     updatedAt: new Date(),
   }));
 
-  const mockChats: Chat[] = Array.from({ length: 5 }, (_, index) => ({
-    id: randomUUID(),
-    title: `Chat ${index + 1}`,
-    projectId: index < 2 ? mockProjects[index].id : null,
-    userId: mockUser.id,
-    createdAt: new Date(),
-    updatedAt: new Date(),
-  }));
+  let projectNumber = 0;
+  const mockProjects: Project[] = mockUsers.flatMap((user) =>
+    Array.from({ length: 5 }, () => ({
+      id: randomUUID(),
+      title: `Project ${++projectNumber}`,
+      description: `Project ${projectNumber} Description`,
+      userId: user.id,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    }))
+  );
+
+  let chatNumber = 0;
+  const mockChats: Chat[] = [
+    ...mockUsers.flatMap((user) =>
+      Array.from({ length: 5 }, () => ({
+        id: randomUUID(),
+        title: `Chat ${++chatNumber}`,
+        projectId: null,
+        userId: user.id,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      }))
+    ),
+    ...mockProjects.flatMap((project) =>
+      Array.from({ length: 5 }, () => ({
+        id: randomUUID(),
+        title: `Chat ${++chatNumber}`,
+        projectId: project.id,
+        userId: project.userId,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      }))
+    ),
+  ];
 
   let documentNumber = 0;
   const mockDocuments: Document[] = [
-    ...mockProjects.slice(0, 4).map((project) => ({
+    ...mockProjects.map((project) => ({
       id: randomUUID(),
       key: randomUUID(),
       name: `Document ${++documentNumber}`,
@@ -60,11 +82,11 @@ describe("DocumentRepository", () => {
       isProcessed: false,
       chatId: null,
       projectId: project.id,
-      userId: mockUser.id,
-      createdAt: new Date(),
-      updatedAt: new Date(),
+      userId: project.userId,
+      createdAt: addDays(new Date(), -100 + documentNumber),
+      updatedAt: addDays(new Date(), -100 + documentNumber),
     })),
-    ...mockChats.slice(0, 4).map((chat) => ({
+    ...mockChats.map((chat) => ({
       id: randomUUID(),
       key: randomUUID(),
       name: `Document ${++documentNumber}`,
@@ -74,13 +96,13 @@ describe("DocumentRepository", () => {
       chatId: chat.id,
       projectId: null,
       userId: chat.userId,
-      createdAt: new Date(),
-      updatedAt: new Date(),
+      createdAt: addDays(new Date(), -100 + documentNumber),
+      updatedAt: addDays(new Date(), -100 + documentNumber),
     })),
   ];
 
   beforeAll(async () => {
-    await insertUsers([mockUser], pool);
+    await insertUsers(mockUsers, pool);
     await insertProjects(mockProjects, pool);
     await insertChats(mockChats, pool);
   });
@@ -106,6 +128,8 @@ describe("DocumentRepository", () => {
     });
 
     it("should return the total number of documents of a user", async () => {
+      const mockUser = mockUsers[0];
+
       const count = await documentRepository.count({ userId: mockUser.id });
 
       expect(count).toBe(
@@ -132,13 +156,13 @@ describe("DocumentRepository", () => {
   });
 
   describe("findAll", () => {
-    it("should return all documents", async () => {
+    it("should return all documents sorted by creation date", async () => {
       const databaseDocuments = await documentRepository.findAll();
 
       expect(databaseDocuments).toEqual(mockDocuments);
     });
 
-    it("should return chat documents", async () => {
+    it("should return chat documents sorted by creation date", async () => {
       const mockChat = mockChats[0];
 
       const databaseDocuments = await documentRepository.findAll({
@@ -150,7 +174,7 @@ describe("DocumentRepository", () => {
       );
     });
 
-    it("should return project documents", async () => {
+    it("should return project documents sorted by creation date", async () => {
       const mockProject = mockProjects[0];
 
       const databaseDocuments = await documentRepository.findAll({
@@ -172,8 +196,8 @@ describe("DocumentRepository", () => {
       expect(databaseDocuments).toEqual([]);
     });
 
-    it("should return chat and project documents", async () => {
-      const mockChat = mockChats[0];
+    it("should return chat and project documents sorted by creation date", async () => {
+      const mockChat = mockChats[25];
 
       const databaseDocuments = await documentRepository.findAny({
         chatId: mockChat.id,
@@ -212,6 +236,8 @@ describe("DocumentRepository", () => {
 
   describe("create", () => {
     it("should create a new document", async () => {
+      const mockUser = mockUsers[0];
+
       const newDocument: Document = {
         id: randomUUID(),
         key: randomUUID(),
@@ -290,6 +316,28 @@ describe("DocumentRepository", () => {
       expect(databaseDocuments).toEqual(
         expect.arrayContaining(
           mockDocuments.filter((document) => document.id !== mockDocument.id)
+        )
+      );
+    });
+  });
+
+  describe("getAllUserChatDocuments", () => {
+    it("should return all user chat documents sorted by creation date", async () => {
+      const mockUser = mockUsers[0];
+
+      const databaseDocuments =
+        await documentRepository.getAllUserChatDocuments(mockUser.id);
+
+      const mockUserChats = new Set(
+        mockChats
+          .filter((chat) => chat.userId === mockUser.id)
+          .map((chat) => chat.id)
+      );
+
+      expect(databaseDocuments).toEqual(
+        mockDocuments.filter(
+          (document) =>
+            document.chatId != null && mockUserChats.has(document.chatId)
         )
       );
     });

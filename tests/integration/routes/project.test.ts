@@ -10,8 +10,10 @@ import {
   CreateProjectRequest,
   UpdateProjectRequest,
 } from "../../../src/models/requests/project";
-import { ApplicationErrorCode } from "../../../src/utils/errors";
-import { HttpStatusCode } from "../../../src/utils/types";
+import {
+  ApplicationErrorCode,
+  HttpStatusCode,
+} from "../../../src/utils/errors";
 import {
   createTestPool,
   insertDocuments,
@@ -33,6 +35,9 @@ describe("Project Routes", () => {
     password: "password",
     displayName: `User ${index + 1}`,
     customPrompt: null,
+    verificationToken: null,
+    recoveryToken: null,
+    isVerified: true,
     createdAt: new Date(),
     updatedAt: new Date(),
   }));
@@ -228,7 +233,14 @@ describe("Project Routes", () => {
           documents: mockDocuments
             .filter((document) => document.projectId === mockProject.id)
             .map((document) => ({
-              ...document,
+              id: document.id,
+              name: document.name,
+              mimetype: document.mimetype,
+              sizeInBytes: document.sizeInBytes,
+              isProcessed: document.isProcessed,
+              chatId: document.chatId,
+              projectId: document.projectId,
+              userId: document.userId,
               createdAt: document.createdAt!.toISOString(),
               updatedAt: document.updatedAt!.toISOString(),
             })),

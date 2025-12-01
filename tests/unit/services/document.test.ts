@@ -26,6 +26,9 @@ describe("DocumentService", () => {
     password: "password",
     displayName: "User 1",
     customPrompt: null,
+    verificationToken: null,
+    recoveryToken: null,
+    isVerified: true,
     createdAt: new Date(),
     updatedAt: new Date(),
   };
@@ -86,6 +89,7 @@ describe("DocumentService", () => {
       create: jest.fn(),
       update: jest.fn(),
       delete: jest.fn(),
+      getAllUserChatDocuments: jest.fn(),
     };
 
     documentService = new DocumentService(

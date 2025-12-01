@@ -8,7 +8,6 @@ import {
   Message,
   TextContentBlock,
 } from "../../../src/models/entities/message";
-import { Session } from "../../../src/models/entities/session";
 import { User } from "../../../src/models/entities/user";
 import {
   CreateChatRequest,
@@ -47,23 +46,19 @@ describe("ChatService", () => {
     password: "password",
     displayName: "User 1",
     customPrompt: null,
+    verificationToken: null,
+    recoveryToken: null,
+    isVerified: true,
     createdAt: new Date(),
     updatedAt: new Date(),
   };
 
-  const mockSession: Session = {
-    id: randomUUID(),
-    userId: mockUser.id,
-    expiresAt: new Date(),
-    createdAt: new Date(),
-  };
-
   const authContext: AuthContext = {
     session: {
-      id: mockSession.id,
-      expiresAt: mockSession.expiresAt.toISOString(),
-      userId: mockSession.userId,
-      createdAt: mockSession.createdAt!.toISOString(),
+      id: randomUUID(),
+      expiresAt: new Date().toISOString(),
+      userId: mockUser.id,
+      createdAt: new Date().toISOString(),
     },
     user: { id: mockUser.id, name: mockUser.name, email: mockUser.email },
   };
@@ -125,7 +120,6 @@ describe("ChatService", () => {
     };
 
     userRepository = {
-      count: jest.fn(),
       exists: jest.fn(),
       findAll: jest.fn(),
       findOne: jest.fn(),
@@ -151,6 +145,7 @@ describe("ChatService", () => {
       create: jest.fn(),
       update: jest.fn(),
       delete: jest.fn(),
+      deleteAll: jest.fn(),
     };
 
     messageRepository = {
@@ -169,10 +164,12 @@ describe("ChatService", () => {
       create: jest.fn(),
       update: jest.fn(),
       delete: jest.fn(),
+      getAllUserChatDocuments: jest.fn(),
     };
 
     assistantService = {
-      getMode: jest.fn(),
+      getStatus: jest.fn(),
+      isContentValid: jest.fn(),
       generateChatTitle: jest.fn(),
       sendMessage: jest.fn(),
     };
@@ -796,6 +793,16 @@ describe("ChatService", () => {
       );
 
       expect(response).toEqual(mockChat.id);
+    });
+  });
+
+  describe("deleteAllChats", () => {
+    it("should delete all user chats and return true", async () => {
+      documentRepository.getAllUserChatDocuments.mockResolvedValue([]);
+
+      const response = await chatService.deleteAllChats(authContext);
+
+      expect(response).toBe(true);
     });
   });
 });

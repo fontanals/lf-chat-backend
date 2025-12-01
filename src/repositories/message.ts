@@ -1,5 +1,5 @@
 import { IDataContext } from "../data/data-context";
-import { AssistantMessage, Message } from "../models/entities/message";
+import { Message } from "../models/entities/message";
 import { ArrayUtils } from "../utils/arrays";
 import { NullablePartial } from "../utils/types";
 
@@ -123,12 +123,19 @@ export class MessageRepository implements IMessageRepository {
         ${message.content != null ? `content = $${++paramsCount},` : ""}
         ${message.feedback != null ? `feedback = $${++paramsCount},` : ""}
         ${message.feedback === null ? "feedback = null," : ""}
+        ${
+          message.finishReason != null
+            ? `finish_reason = $${++paramsCount},`
+            : ""
+        }
+        ${message.finishReason === null ? "finish_reason = null," : ""}
         id = id
       WHERE
         id = $${++paramsCount};`,
       [
         message.content != null ? JSON.stringify(message.content) : null,
-        (message as AssistantMessage).feedback,
+        message.feedback,
+        message.finishReason,
         id,
       ].filter((param) => param != null)
     );

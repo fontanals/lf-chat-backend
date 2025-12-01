@@ -17,6 +17,7 @@ import {
   AssistantService,
   IAssistantService,
 } from "../../../src/services/assistant";
+import { ILogger } from "../../../src/services/logger";
 import { PromiseUtils } from "../../../src/utils/promises";
 
 describe("AssistantService", () => {
@@ -26,6 +27,7 @@ describe("AssistantService", () => {
   let openAiModelUsageRepository: jest.Mocked<IOpenAiModelUsageRepository>;
   let mockAssistantService: jest.Mocked<IAssistantService>;
   let aiService: jest.Mocked<AiService>;
+  let logger: ILogger;
   let assistantService: AssistantService;
 
   const mockOpenAiModelUsages: OpenAiModelUsage[] = [
@@ -87,6 +89,7 @@ describe("AssistantService", () => {
       create: jest.fn(),
       update: jest.fn(),
       delete: jest.fn(),
+      getAllUserChatDocuments: jest.fn(),
     };
 
     documentChunkRepository = {
@@ -101,7 +104,8 @@ describe("AssistantService", () => {
     };
 
     mockAssistantService = {
-      getMode: jest.fn(),
+      getStatus: jest.fn(),
+      isContentValid: jest.fn(),
       generateChatTitle: jest.fn(),
       sendMessage: jest.fn(),
     };
@@ -113,23 +117,26 @@ describe("AssistantService", () => {
       createModeration: jest.fn(),
     };
 
+    logger = { info: jest.fn(), warn: jest.fn(), error: jest.fn() };
+
     assistantService = new AssistantService(
       fileStorage,
       documentRepository,
       documentChunkRepository,
       openAiModelUsageRepository,
       mockAssistantService,
-      aiService
+      aiService,
+      logger
     );
   });
 
-  describe("getMode", () => {
+  describe("getStatus", () => {
     it("should return 'mock' when global open ai model usage has reached limit", async () => {
       openAiModelUsageRepository.findAll.mockResolvedValue(
         mockPastLimitOpenAiModelUsages
       );
 
-      const mode = await assistantService.getMode();
+      const mode = await assistantService.getStatus();
 
       expect(mode).toBe("mock");
     });
@@ -139,9 +146,31 @@ describe("AssistantService", () => {
         mockOpenAiModelUsages
       );
 
-      const mode = await assistantService.getMode();
+      const mode = await assistantService.getStatus();
 
       expect(mode).toBe("open-ai");
+    });
+  });
+
+  describe("isContentValid", () => {
+    it("should return false when content is invalid", async () => {
+      aiService.createModeration.mockResolvedValue({
+        results: [{ flagged: true }],
+      } as any);
+
+      const isValid = await assistantService.isContentValid("");
+
+      expect(isValid).toBe(false);
+    });
+
+    it("should return true when content is valid", async () => {
+      aiService.createModeration.mockResolvedValue({
+        results: [{ flagged: false }],
+      } as any);
+
+      const isValid = await assistantService.isContentValid("");
+
+      expect(isValid).toBe(true);
     });
   });
 

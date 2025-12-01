@@ -14,6 +14,9 @@ describe("UserRepository", () => {
     password: "password",
     displayName: `User ${index + 1}`,
     customPrompt: null,
+    verificationToken: null,
+    recoveryToken: null,
+    isVerified: true,
     createdAt: new Date(),
     updatedAt: new Date(),
   }));
@@ -28,24 +31,6 @@ describe("UserRepository", () => {
     };
 
     userRepository = new UserRepository(dataContext);
-  });
-
-  describe("count", () => {
-    it("should return 0 when no users are found", async () => {
-      dataContext.query.mockResolvedValue({ rows: [{ count: "0" }] });
-
-      const count = await userRepository.count();
-
-      expect(count).toBe(0);
-    });
-
-    it("should return the correct user count", async () => {
-      dataContext.query.mockResolvedValue({ rows: [{ count: "5" }] });
-
-      const count = await userRepository.count();
-
-      expect(count).toBe(5);
-    });
   });
 
   describe("exists", () => {

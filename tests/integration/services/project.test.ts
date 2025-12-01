@@ -9,8 +9,15 @@ import {
   CreateProjectRequest,
   UpdateProjectRequest,
 } from "../../../src/models/requests/project";
+import { DocumentRepository } from "../../../src/repositories/document";
+import { DocumentChunkRepository } from "../../../src/repositories/document-chunk";
+import { OpenAiModelUsageRepository } from "../../../src/repositories/open-ai-model-usage";
 import { ProjectRepository } from "../../../src/repositories/project";
+import { aiService } from "../../../src/services/ai";
+import { AssistantService } from "../../../src/services/assistant";
+import { MockAssistantService } from "../../../src/services/assistant-mock";
 import { AuthContext } from "../../../src/services/auth";
+import { Logger } from "../../../src/services/logger";
 import { ProjectService } from "../../../src/services/project";
 import {
   createTestPool,
@@ -26,10 +33,27 @@ describe("ProjectService", () => {
   const dataContext = new DataContext(pool);
   const fileStorage = new FileStorage();
   const projectRepository = new ProjectRepository(dataContext);
+  const documentRepository = new DocumentRepository(dataContext);
+  const documentChunkRepository = new DocumentChunkRepository(dataContext);
+  const openAiModelUsageRepository = new OpenAiModelUsageRepository(
+    dataContext
+  );
+  const mockAssistantService = new MockAssistantService();
+  const logger = new Logger();
+  const assistantService = new AssistantService(
+    fileStorage,
+    documentRepository,
+    documentChunkRepository,
+    openAiModelUsageRepository,
+    mockAssistantService,
+    aiService,
+    logger
+  );
   const projectService = new ProjectService(
     dataContext,
     fileStorage,
-    projectRepository
+    projectRepository,
+    assistantService
   );
 
   const mockUser: User = {
@@ -39,8 +63,11 @@ describe("ProjectService", () => {
     password: "password",
     displayName: "User 1",
     customPrompt: null,
-    createdAt: addDays(new Date(), -100),
-    updatedAt: addDays(new Date(), -100),
+    verificationToken: null,
+    recoveryToken: null,
+    isVerified: true,
+    createdAt: new Date(),
+    updatedAt: new Date(),
   };
 
   const authContext: AuthContext = {
@@ -58,8 +85,8 @@ describe("ProjectService", () => {
     title: `Project ${index + 1}`,
     description: `Project ${index + 1} Description`,
     userId: mockUser.id,
-    createdAt: addDays(mockUser.createdAt!, -100 + index),
-    updatedAt: addDays(mockUser.createdAt!, -100 + index),
+    createdAt: addDays(new Date(), -100 + index),
+    updatedAt: addDays(new Date(), -100 + index),
   }));
 
   let documentNumber = 0;
@@ -136,9 +163,20 @@ describe("ProjectService", () => {
 
       expect(response).toEqual({
         ...mockProject,
-        documents: mockDocuments.filter(
-          (document) => document.projectId === mockProject.id
-        ),
+        documents: mockDocuments
+          .filter((document) => document.projectId === mockProject.id)
+          .map((document) => ({
+            id: document.id,
+            name: document.name,
+            mimetype: document.mimetype,
+            sizeInBytes: document.sizeInBytes,
+            isProcessed: document.isProcessed,
+            chatId: document.chatId,
+            projectId: document.projectId,
+            userId: document.userId,
+            createdAt: document.createdAt,
+            updatedAt: document.updatedAt,
+          })),
       });
     });
   });

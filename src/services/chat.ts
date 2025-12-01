@@ -1,7 +1,7 @@
 import z from "zod";
 import { IDataContext } from "../data/data-context";
 import { IFileStorage } from "../files/file-storage";
-import { Chat } from "../models/entities/chat";
+import { Chat, mapChatToDto } from "../models/entities/chat";
 import { Message, UserMessage } from "../models/entities/message";
 import { Project } from "../models/entities/project";
 import {
@@ -19,8 +19,9 @@ import {
   UpdateMessageRequest,
 } from "../models/requests/chat";
 import {
+  DeleteAllChatsResponse,
   DeleteChatResponse,
-  GetAssistantModeResponse,
+  GetAssistantStatusResponse,
   GetChatMessagesResponse,
   GetChatResponse,
   GetChatsResponse,
@@ -33,6 +34,7 @@ import { IDocumentRepository } from "../repositories/document";
 import { IMessageRepository } from "../repositories/message";
 import { IProjectRepository } from "../repositories/project";
 import { IUserRepository } from "../repositories/user";
+import { ArrayUtils } from "../utils/arrays";
 import { ApplicationError } from "../utils/errors";
 import {
   getQueryDate,
@@ -43,10 +45,9 @@ import {
 } from "../utils/express";
 import { IAssistantService } from "./assistant";
 import { AuthContext } from "./auth";
-import { ArrayUtils } from "../utils/arrays";
 
 export interface IChatService {
-  getAssistantMode(): Promise<GetAssistantModeResponse>;
+  getAssistantStatus(): Promise<GetAssistantStatusResponse>;
   getChats(
     query: GetChatsQuery,
     authContext: AuthContext
@@ -87,6 +88,7 @@ export interface IChatService {
     params: DeleteChatParams,
     authContext: AuthContext
   ): Promise<DeleteChatResponse>;
+  deleteAllChats(authContext: AuthContext): Promise<DeleteAllChatsResponse>;
 }
 
 export class ChatService implements IChatService {
@@ -119,10 +121,10 @@ export class ChatService implements IChatService {
     this.assistantService = assistantService;
   }
 
-  async getAssistantMode(): Promise<GetAssistantModeResponse> {
-    const assistantMode = this.assistantService.getMode();
+  async getAssistantStatus(): Promise<GetAssistantStatusResponse> {
+    const assistantStatus = this.assistantService.getStatus();
 
-    return assistantMode;
+    return assistantStatus;
   }
 
   async getChats(
@@ -140,7 +142,11 @@ export class ChatService implements IChatService {
       { title: search, projectId, userId: authContext.user.id }
     );
 
-    return paginatedChats;
+    return {
+      items: paginatedChats.items.map(mapChatToDto),
+      totalItems: paginatedChats.totalItems,
+      nextCursor: paginatedChats.nextCursor,
+    };
   }
 
   async getChat(
@@ -160,7 +166,9 @@ export class ChatService implements IChatService {
       throw ApplicationError.notFound();
     }
 
-    return chat;
+    const chatDto = mapChatToDto(chat);
+
+    return chatDto;
   }
 
   async getChatMessages(
@@ -301,6 +309,12 @@ export class ChatService implements IChatService {
 
     await this.messageRepository.create(assistantMessage);
 
+    if (assistantMessage.finishReason === "content-filter") {
+      await this.messageRepository.update(userMessage.id, {
+        finishReason: "content-filter",
+      });
+    }
+
     if (assistantMessage.finishReason === "stop") {
       const title = await this.assistantService.generateChatTitle([
         userMessage,
@@ -391,6 +405,12 @@ export class ChatService implements IChatService {
     });
 
     await this.messageRepository.create(assistantMessage);
+
+    if (assistantMessage.finishReason === "content-filter") {
+      await this.messageRepository.update(userMessage.id, {
+        finishReason: "content-filter",
+      });
+    }
 
     if (assistantMessage.finishReason === "stop" && chat.title === "New Chat") {
       const title = await this.assistantService.generateChatTitle([
@@ -488,5 +508,21 @@ export class ChatService implements IChatService {
     await this.chatRepository.delete(params.chatId);
 
     return params.chatId;
+  }
+
+  async deleteAllChats(
+    authContext: AuthContext
+  ): Promise<DeleteAllChatsResponse> {
+    const documents = await this.documentRepository.getAllUserChatDocuments(
+      authContext.user.id
+    );
+
+    await this.fileStorage.deleteFiles(
+      documents.map((document) => document.key)
+    );
+
+    await this.chatRepository.deleteAll({ userId: authContext.user.id });
+
+    return true;
   }
 }

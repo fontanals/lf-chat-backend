@@ -1,7 +1,7 @@
 import z from "zod";
 import { IDataContext } from "../data/data-context";
 import { IFileStorage } from "../files/file-storage";
-import { Project } from "../models/entities/project";
+import { mapProjectToDto, Project } from "../models/entities/project";
 import {
   CreateProjectRequest,
   DeleteProjectParams,
@@ -20,6 +20,7 @@ import {
 import { IProjectRepository } from "../repositories/project";
 import { ApplicationError } from "../utils/errors";
 import { getQueryStringArray, validateRequest } from "../utils/express";
+import { IAssistantService } from "./assistant";
 import { AuthContext } from "./auth";
 
 export interface IProjectService {
@@ -48,15 +49,18 @@ export class ProjectService implements IProjectService {
   private readonly dataContext: IDataContext;
   private readonly fileStorage: IFileStorage;
   private readonly projectRepository: IProjectRepository;
+  private readonly assistantService: IAssistantService;
 
   constructor(
     dataContext: IDataContext,
     fileStorage: IFileStorage,
-    projectRepository: IProjectRepository
+    projectRepository: IProjectRepository,
+    assistantService: IAssistantService
   ) {
     this.dataContext = dataContext;
     this.fileStorage = fileStorage;
     this.projectRepository = projectRepository;
+    this.assistantService = assistantService;
   }
 
   async getProjects(authContext: AuthContext): Promise<GetProjectsResponse> {
@@ -64,7 +68,9 @@ export class ProjectService implements IProjectService {
       userId: authContext.user.id,
     });
 
-    return projects;
+    const projectDtos = projects.map(mapProjectToDto);
+
+    return projectDtos;
   }
 
   async getProject(
@@ -84,7 +90,9 @@ export class ProjectService implements IProjectService {
       throw ApplicationError.notFound();
     }
 
-    return project;
+    const projectDto = mapProjectToDto(project);
+
+    return projectDto;
   }
 
   async createProject(
@@ -99,6 +107,14 @@ export class ProjectService implements IProjectService {
         description: z.string(),
       })
     );
+
+    const isContentValid = await this.assistantService.isContentValid(
+      `${request.title}\n${request.description}`
+    );
+
+    if (!isContentValid) {
+      throw ApplicationError.contentFilter();
+    }
 
     const project: Project = {
       id: request.id,
@@ -132,6 +148,14 @@ export class ProjectService implements IProjectService {
 
     if (!projectExists) {
       throw ApplicationError.notFound();
+    }
+
+    const isContentValid = await this.assistantService.isContentValid(
+      `${request.title ?? ""}\n${request.description ?? ""}`
+    );
+
+    if (!isContentValid) {
+      throw ApplicationError.contentFilter();
     }
 
     await this.projectRepository.update(params.projectId, {

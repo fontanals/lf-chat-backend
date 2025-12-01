@@ -25,6 +25,9 @@ describe("DocumentChunkRepository", () => {
     password: "password",
     displayName: "User 1",
     customPrompt: null,
+    verificationToken: null,
+    recoveryToken: null,
+    isVerified: true,
     createdAt: new Date(),
     updatedAt: new Date(),
   };

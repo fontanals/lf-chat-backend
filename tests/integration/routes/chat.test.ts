@@ -18,8 +18,10 @@ import {
 } from "../../../src/models/requests/chat";
 import { SendMessageEvent } from "../../../src/models/responses/chat";
 import { ArrayUtils } from "../../../src/utils/arrays";
-import { ApplicationErrorCode } from "../../../src/utils/errors";
-import { HttpStatusCode } from "../../../src/utils/types";
+import {
+  ApplicationErrorCode,
+  HttpStatusCode,
+} from "../../../src/utils/errors";
 import {
   createTestPool,
   insertChats,
@@ -43,6 +45,9 @@ describe("Chat Routes", () => {
     password: "password",
     displayName: `User ${index + 1}`,
     customPrompt: null,
+    verificationToken: null,
+    recoveryToken: null,
+    isVerified: true,
     createdAt: new Date(),
     updatedAt: new Date(),
   }));
@@ -1284,6 +1289,31 @@ describe("Chat Routes", () => {
       expect(response.status).toBe(HttpStatusCode.Ok);
 
       expect(response.body).toEqual({ success: true, data: mockChat.id });
+    });
+  });
+
+  describe("deleteAllChats", () => {
+    it("should return an unauthorized response when no access or refresh token is provided", async () => {
+      const response = await request(expressApp).delete("/api/chats");
+
+      expect(response.status).toBe(HttpStatusCode.Unauthorized);
+
+      expect(response.body).toEqual({
+        success: false,
+        error: expect.objectContaining({
+          code: ApplicationErrorCode.Unauthorized,
+        }),
+      });
+    });
+
+    it("should return a success response", async () => {
+      const response = await request(expressApp)
+        .delete("/api/chats")
+        .set("Authorization", `Bearer ${accessTokens[0]}`);
+
+      expect(response.status).toBe(HttpStatusCode.Ok);
+
+      expect(response.body).toEqual({ success: true, data: true });
     });
   });
 });

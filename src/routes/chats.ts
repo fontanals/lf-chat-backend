@@ -14,11 +14,11 @@ export function createChatRoutes(serviceContainer: ServiceContainer) {
   const router = Router();
 
   router.get(
-    "/assistant-mode",
+    "/assistant-status",
     jsonRequestHandler(serviceContainer, async (req, res, services) => {
       const chatService = services.get("ChatService");
 
-      const response = await chatService.getAssistantMode();
+      const response = await chatService.getAssistantStatus();
 
       return response;
     })
@@ -138,6 +138,17 @@ export function createChatRoutes(serviceContainer: ServiceContainer) {
         req.params as DeleteChatParams,
         req.authContext
       );
+
+      return response;
+    })
+  );
+
+  router.delete(
+    "/",
+    jsonRequestHandler(serviceContainer, async (req, res, services) => {
+      const chatService = services.get("ChatService");
+
+      const response = await chatService.deleteAllChats(req.authContext);
 
       return response;
     })

@@ -213,7 +213,7 @@ export class DocumentChunkRepository implements IDocumentChunkRepository {
     );
   }
 
-  mapRowToDocumentChunk(
+  private mapRowToDocumentChunk(
     row: DocumentChunkQueryRow,
     includeDocument: boolean
   ): DocumentChunk {
@@ -228,7 +228,7 @@ export class DocumentChunkRepository implements IDocumentChunkRepository {
     };
   }
 
-  mapRowToDocument(row: DocumentChunkQueryRow): Document {
+  private mapRowToDocument(row: DocumentChunkQueryRow): Document {
     return {
       id: row.documentId!,
       key: row.documentKey!,
@@ -244,7 +244,7 @@ export class DocumentChunkRepository implements IDocumentChunkRepository {
     };
   }
 
-  mapRowsToDocumentChunks(
+  private mapRowsToDocumentChunks(
     rows: DocumentChunkQueryRow[],
     includeDocument: boolean
   ): DocumentChunk[] {

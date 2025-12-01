@@ -1,15 +1,15 @@
-name: lf_chat_dev
+name: lf_chat_test
 services:
   api:
-    container_name: lf_chat_api
+    container_name: lf_chat_api_test
     build:
       context: .
       target: development
     ports:
-      - ${PORT:-3000}:${PORT:-3000}
-    command: npm run dev
+      - ${PORT:-3001}:${PORT:-3001}
+    command: npm run dev:test
     env_file:
-      - .env
+      - .env.test
     volumes:
       - .:/app
       - /app/node_modules
@@ -18,14 +18,14 @@ services:
         condition: service_healthy
 
   postgres:
-    container_name: lf_chat_postgres
+    container_name: lf_chat_postgres_test
     image: pgvector/pgvector:pg18-trixie
     ports:
-      - ${POSTGRES_PORT:-5432}:5432
+      - ${POSTGRES_PORT:-5433}:5432
     env_file:
-      - .env
+      - .env.test
     volumes:
-      - postgres_data:/var/lib/postgresql
+      - postgres_data_test:/var/lib/postgresql
       - ./src/data/schema.sql:/docker-entrypoint-initdb.d/schema.sql
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
@@ -34,4 +34,4 @@ services:
       retries: 5
 
 volumes:
-  postgres_data:
+  postgres_data_test:

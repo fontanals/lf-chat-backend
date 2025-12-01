@@ -36,8 +36,8 @@ export class Application {
     if (config.ENABLE_RATE_LIMITING) {
       expressApp.use(
         rateLimit({
-          windowMs: config.DEFAULT_RATE_LIMIT_WINDOW_IN_MINUTES * 60 * 1000,
-          max: config.DEFAULT_RATE_LIMIT_MAX_REQUESTS,
+          windowMs: config.RATE_LIMIT_WINDOW_IN_MINUTES * 60 * 1000,
+          max: config.RATE_LIMIT_MAX_REQUESTS,
           standardHeaders: true,
           legacyHeaders: false,
         })
@@ -60,6 +60,10 @@ export class Application {
 
   async end() {
     await this.pool.end();
+
+    const emailService = this.serviceContainer.get("EmailService");
+
+    emailService.close();
 
     await new Promise((resolve) => {
       this.server.close((error) => {

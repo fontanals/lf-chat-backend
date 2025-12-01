@@ -50,6 +50,23 @@ export const chatsPaths: OpenAPIV3.PathsObject = {
         "500": { $ref: "#/components/responses/InternalServerError" },
       },
     },
+    delete: {
+      summary: "Delete all chats",
+      tags: ["Chats"],
+      security: [{ BearerAuth: [] }],
+      responses: {
+        "200": {
+          description: "Success",
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/DeleteAllChatsResponse" },
+            },
+          },
+        },
+        "401": { $ref: "#/components/responses/Unauthorized" },
+        "500": { $ref: "#/components/responses/InternalServerError" },
+      },
+    },
   },
   "/api/chats/{chatId}": {
     get: {

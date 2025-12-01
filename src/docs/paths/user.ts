@@ -63,32 +63,4 @@ export const userPaths: OpenAPIV3.PathsObject = {
       },
     },
   },
-  "/api/user/password": {
-    patch: {
-      summary: "Change password",
-      tags: ["User"],
-      security: [{ BearerAuth: [] }],
-      requestBody: {
-        required: true,
-        content: {
-          "application/json": {
-            schema: { $ref: "#/components/schemas/ChangePasswordRequest" },
-          },
-        },
-      },
-      responses: {
-        "200": {
-          description: "Success",
-          content: {
-            "application/json": {
-              schema: { $ref: "#/components/schemas/ChangePasswordResponse" },
-            },
-          },
-        },
-        "400": { $ref: "#/components/responses/BadRequest" },
-        "401": { $ref: "#/components/responses/Unauthorized" },
-        "500": { $ref: "#/components/responses/InternalServerError" },
-      },
-    },
-  },
 };

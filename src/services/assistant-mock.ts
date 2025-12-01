@@ -6,7 +6,7 @@ import {
 } from "../models/entities/message";
 import { PromiseUtils } from "../utils/promises";
 import {
-  AssistantMode,
+  AssistantStatus,
   IAssistantService,
   SendMessageOptions,
 } from "./assistant";
@@ -115,8 +115,12 @@ const mockChats = [
 ];
 
 export class MockAssistantService implements IAssistantService {
-  async getMode(): Promise<AssistantMode> {
+  async getStatus(): Promise<AssistantStatus> {
     return "mock";
+  }
+
+  async isContentValid(content: string): Promise<boolean> {
+    return true;
   }
 
   async generateChatTitle(messages: Message[]): Promise<string> {

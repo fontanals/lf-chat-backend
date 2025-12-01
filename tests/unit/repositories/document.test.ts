@@ -126,4 +126,16 @@ describe("DocumentRepository", () => {
       expect(document).toEqual(mockDocument);
     });
   });
+
+  describe("getAllUserChatDocuments", () => {
+    it("should return an empty array when no documents are found", async () => {
+      dataContext.query.mockResolvedValue({ rows: [] });
+
+      const documents = await documentRepository.getAllUserChatDocuments(
+        randomUUID()
+      );
+
+      expect(documents).toEqual([]);
+    });
+  });
 });

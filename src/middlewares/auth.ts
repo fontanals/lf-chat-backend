@@ -23,17 +23,13 @@ export function authMiddleware(services: IServiceProvider): RequestHandler {
         const result = authService.validateAccessToken(accessToken);
 
         if (result.isValid) {
-          req.authContext = result.authContext;
+          req.authContext = result.payload;
 
           return next();
         }
       }
 
       const result = await authService.refreshToken(refreshToken);
-
-      if (!result.isValid) {
-        throw ApplicationError.unauthorized();
-      }
 
       res
         .setHeader("Authorization", `Bearer ${result.accessToken}`)

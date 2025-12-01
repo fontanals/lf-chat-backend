@@ -14,6 +14,9 @@ CREATE TABLE "user" (
     "password" text NOT NULL,
     "display_name" text NOT NULL,
     "custom_prompt" text,
+    "verification_token" text,
+    "recovery_token" text,
+    "is_verified" boolean NOT NULL DEFAULT false,
     "created_at" timestamp with time zone NOT NULL DEFAULT now(),
     "updated_at" timestamp with time zone NOT NULL DEFAULT now()
 );
@@ -136,11 +139,6 @@ CREATE TRIGGER set_open_ai_model_usage_updated_at
 BEFORE UPDATE ON "open_ai_model_usage"
 FOR EACH ROW
 EXECUTE FUNCTION set_updated_at();
-
-INSERT INTO "user"
-(id, name, email, password, display_name, custom_prompt)
-VALUES
-(gen_random_uuid(), 'Demo User', 'demo@lfchat.com', '$2b$10$NOARcGh.tPYQTLgSi23kjuiHJNHFxC7diXdMt2JT0rcyX4Pctt3L2', 'Demo', '');
 
 INSERT INTO "open_ai_model_usage"
 (model, input_tokens, output_tokens, total_tokens)

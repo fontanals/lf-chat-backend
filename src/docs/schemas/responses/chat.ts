@@ -148,7 +148,7 @@ const SendMessageEventSchema: OpenAPIV3.SchemaObject = {
   ],
 };
 
-const GetAssistantModeResponseSchema: OpenAPIV3.SchemaObject = {
+const GetAssistantStatusResponseSchema: OpenAPIV3.SchemaObject = {
   allOf: [
     { $ref: "#/components/schemas/SuccessResponse" },
     {
@@ -295,13 +295,26 @@ const DeleteChatResponseSchema: OpenAPIV3.SchemaObject = {
   ],
 };
 
+const DeleteAllChatsResponseSchema: OpenAPIV3.SchemaObject = {
+  allOf: [
+    { $ref: "#/components/schemas/SuccessResponse" },
+    {
+      type: "object",
+      properties: {
+        data: { type: "boolean", enum: [true], example: true },
+      },
+    },
+  ],
+};
+
 export const chatResponseSchemas = {
   SendMessageEvent: SendMessageEventSchema,
-  GetAssistantModeResponse: GetAssistantModeResponseSchema,
+  GetAssistantStatusResponse: GetAssistantStatusResponseSchema,
   GetChatsResponse: GetChatsResponseSchema,
   GetChatResponse: GetChatResponseSchema,
   GetChatMessagesResponse: GetChatMessagesResponseSchema,
   UpdateChatResponse: UpdateChatResponseSchema,
   UpdateMessageResponse: UpdateMessageResponseSchema,
   DeleteChatResponse: DeleteChatResponseSchema,
+  DeleteAllChatsResponse: DeleteAllChatsResponseSchema,
 };

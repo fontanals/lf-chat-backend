@@ -5,11 +5,17 @@ export type User = {
   password: string;
   displayName: string;
   customPrompt?: string | null;
+  verificationToken?: string | null;
+  recoveryToken?: string | null;
+  isVerified?: boolean;
   createdAt?: Date;
   updatedAt?: Date;
 };
 
-export type UserDto = Omit<User, "password">;
+export type UserDto = Omit<
+  User,
+  "password" | "verificationToken" | "recoveryToken" | "isVerified"
+>;
 
 export function mapUserToDto(user: User): UserDto {
   return {

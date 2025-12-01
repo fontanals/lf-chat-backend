@@ -8,19 +8,27 @@ import { RefreshToken } from "../../../src/models/entities/refresh-token";
 import { Session } from "../../../src/models/entities/session";
 import { User } from "../../../src/models/entities/user";
 import {
+  RecoverPasswordRequest,
+  ResetPasswordRequest,
   SigninRequest,
   SignupRequest,
+  VerifyAccountRequest,
 } from "../../../src/models/requests/auth";
 import { RefreshTokenRepository } from "../../../src/repositories/refresh-token";
 import { SessionRepository } from "../../../src/repositories/session";
 import { UserRepository } from "../../../src/repositories/user";
 import { AuthContext, AuthService } from "../../../src/services/auth";
+import { EmailService } from "../../../src/services/email";
+import { Logger } from "../../../src/services/logger";
+import {
+  ApplicationError,
+  ApplicationErrorCode,
+} from "../../../src/utils/errors";
 import {
   createTestPool,
   insertRefreshTokens,
   insertSessions,
   insertUsers,
-  truncateSessions,
   truncateUsers,
 } from "../../utils";
 
@@ -30,11 +38,15 @@ describe("AuthService", () => {
   const userRepository = new UserRepository(dataContext);
   const sessionRepository = new SessionRepository(dataContext);
   const refreshTokenRepository = new RefreshTokenRepository(dataContext);
+  const emailService = new EmailService();
+  const logger = new Logger();
   const authService = new AuthService(
     dataContext,
     userRepository,
     sessionRepository,
-    refreshTokenRepository
+    refreshTokenRepository,
+    emailService,
+    logger
   );
 
   const mockUsers: User[] = Array.from({ length: 6 }, (_, index) => ({
@@ -44,6 +56,23 @@ describe("AuthService", () => {
     password: "password",
     displayName: `User ${index + 1}`,
     customPrompt: null,
+    verificationToken:
+      index == 4
+        ? jsonwebtoken.sign(
+            { email: `user${index + 1}@example.com` },
+            config.ACCOUNT_VERIFICATION_TOKEN_SECRET,
+            { expiresIn: "15m" }
+          )
+        : null,
+    recoveryToken:
+      index === 5
+        ? jsonwebtoken.sign(
+            { email: `user${index + 1}@example.com` },
+            config.PASSWORD_RECOVERY_TOKEN_SECRET,
+            { expiresIn: "15m" }
+          )
+        : null,
+    isVerified: index !== 4,
     createdAt: addDays(new Date(), -10 + index),
     updatedAt: addDays(new Date(), -10 + index),
   }));
@@ -87,104 +116,111 @@ describe("AuthService", () => {
       })
   );
 
-  beforeAll(async () => {
+  beforeEach(async () => {
     const hashedPassword = await bcrypt.hash("password", 10);
 
     await insertUsers(
       mockUsers.map((user) => ({ ...user, password: hashedPassword })),
       pool
     );
-  });
 
-  beforeEach(async () => {
     await insertSessions(mockSessions, pool);
     await insertRefreshTokens(mockRefreshTokens, pool);
   });
 
   afterEach(async () => {
-    await truncateSessions(pool);
+    await truncateUsers(pool);
   });
 
   afterAll(async () => {
-    await truncateUsers(pool);
     await pool.end();
+    emailService.close();
   });
 
   describe("signup", () => {
-    it("should signup a new user creating a user, session, and refresh token", async () => {
+    it("should create unverified user with account verification token, send account verification email and return user email", async () => {
       const request: SignupRequest = {
         name: "New User",
         email: "new.user@example.com",
         password: "password",
       };
 
-      const { refreshToken, response } = await authService.signup(request);
+      const response = await authService.signup(request);
 
       const databaseUser = await userRepository.findOne({
-        id: response.user.id,
+        email: request.email,
       });
 
       if (databaseUser == null) {
         fail("Expected user to be created.");
       }
 
-      const databaseSession = await sessionRepository.findOne({
-        id: response.session.id,
+      expect(databaseUser).toEqual({
+        id: expect.any(String),
+        name: request.name,
+        email: request.email,
+        password: expect.any(String),
+        displayName: request.name.split(" ")[0],
+        customPrompt: null,
+        verificationToken: expect.any(String),
+        recoveryToken: null,
+        isVerified: false,
+        createdAt: expect.any(Date),
+        updatedAt: expect.any(Date),
       });
 
-      if (databaseSession == null) {
-        fail("Expected session to be created.");
-      }
+      const isPasswordCorrect = await bcrypt.compare(
+        "password",
+        databaseUser.password
+      );
 
-      const databaseRefreshToken = await refreshTokenRepository.findOne({
-        token: refreshToken,
-      });
+      expect(isPasswordCorrect).toBe(true);
 
-      if (databaseRefreshToken == null) {
-        fail("Expected refresh token to be created.");
-      }
+      expect(
+        jsonwebtoken.verify(
+          databaseUser.verificationToken!,
+          config.ACCOUNT_VERIFICATION_TOKEN_SECRET
+        )
+      ).toEqual(expect.objectContaining({ email: request.email }));
 
-      expect(databaseUser).toEqual(
-        expect.objectContaining({
-          id: response.user.id,
-          name: response.user.name,
-          email: response.user.email,
-        })
+      expect(response).toBe(request.email);
+    });
+  });
+
+  describe("verifyAccount", () => {
+    it("should verify account and return user email", async () => {
+      const mockUser = mockUsers[4];
+
+      const request: VerifyAccountRequest = {
+        token: mockUser.verificationToken!,
+      };
+
+      const response = await authService.verifyAccount(request);
+
+      const databaseUsers = await userRepository.findAll();
+
+      expect(databaseUsers).toEqual(
+        expect.arrayContaining(
+          mockUsers.map((user) =>
+            user.id === mockUser.id
+              ? {
+                  ...user,
+                  password: expect.any(String),
+                  verificationToken: null,
+                  isVerified: true,
+                  updatedAt: expect.any(Date),
+                }
+              : { ...user, password: expect.any(String) }
+          )
+        )
       );
-      expect(databaseSession).toEqual(
-        expect.objectContaining({
-          id: response.session.id,
-          userId: response.session.userId,
-        })
-      );
-      expect(databaseRefreshToken).toEqual(
-        expect.objectContaining({
-          sessionId: response.session.id,
-          isRevoked: false,
-        })
-      );
-      expect(databaseRefreshToken.expiresAt.getTime()).toBeGreaterThanOrEqual(
-        addDays(new Date(), 6).getTime()
-      );
-      expect(response).toEqual({
-        session: {
-          id: databaseSession.id,
-          expiresAt: databaseSession.expiresAt,
-          userId: databaseUser.id,
-        },
-        user: {
-          id: databaseUser.id,
-          name: request.name,
-          email: request.email,
-          displayName: databaseUser.displayName,
-          customPrompt: databaseUser.customPrompt,
-        },
-      });
+
+      expect(response).toBe(mockUser.email);
     });
   });
 
   describe("signin", () => {
-    it("should signin a user creating a session and refresh token", async () => {
+    it("should create a new session and refresh token and return the session, user and the access tokens", async () => {
       const mockUser = mockUsers[0];
 
       const request: SigninRequest = {
@@ -192,15 +228,9 @@ describe("AuthService", () => {
         password: mockUser.password,
       };
 
-      const { refreshToken, response } = await authService.signin(request);
-
-      const databaseUser = await userRepository.findOne({
-        id: response.user.id,
-      });
-
-      if (databaseUser == null) {
-        fail("Expected user to be found.");
-      }
+      const { accessToken, refreshToken, response } = await authService.signin(
+        request
+      );
 
       const databaseSession = await sessionRepository.findOne({
         id: response.session.id,
@@ -218,27 +248,54 @@ describe("AuthService", () => {
         fail("Expected refresh token to be created.");
       }
 
-      expect(databaseUser).toEqual(
+      expect(
+        jsonwebtoken.verify(accessToken, config.ACCESS_TOKEN_SECRET)
+      ).toEqual(
         expect.objectContaining({
-          id: response.user.id,
-          name: response.user.name,
-          email: response.user.email,
+          session: {
+            id: response.session.id,
+            expiresAt: response.session.expiresAt.toISOString(),
+            userId: response.session.userId,
+          },
+          user: {
+            id: response.user.id,
+            name: response.user.name,
+            email: response.user.email,
+          },
         })
       );
 
-      expect(databaseSession).toEqual(
+      expect(
+        jsonwebtoken.verify(refreshToken, config.REFRESH_TOKEN_SECRET)
+      ).toEqual(
         expect.objectContaining({
-          id: response.session.id,
-          userId: response.session.userId,
+          session: {
+            id: response.session.id,
+            expiresAt: response.session.expiresAt.toISOString(),
+            userId: response.session.userId,
+          },
+          user: {
+            id: response.user.id,
+            name: response.user.name,
+            email: response.user.email,
+          },
         })
       );
 
-      expect(databaseRefreshToken).toEqual(
-        expect.objectContaining({
-          sessionId: response.session.id,
-          isRevoked: false,
-        })
-      );
+      expect(databaseSession).toEqual({
+        ...response.session,
+        createdAt: expect.any(Date),
+      });
+
+      expect(databaseRefreshToken).toEqual({
+        id: expect.any(String),
+        token: expect.any(String),
+        isRevoked: false,
+        expiresAt: expect.any(Date),
+        sessionId: response.session.id,
+        createdAt: expect.any(Date),
+        updatedAt: expect.any(Date),
+      });
 
       expect(databaseRefreshToken.expiresAt.getTime()).toBeGreaterThanOrEqual(
         addDays(new Date(), 6).getTime()
@@ -246,8 +303,8 @@ describe("AuthService", () => {
 
       expect(response).toEqual({
         session: {
-          id: databaseSession.id,
-          expiresAt: databaseSession.expiresAt,
+          id: expect.any(String),
+          expiresAt: expect.any(Date),
           userId: mockUser.id,
         },
         user: {
@@ -300,50 +357,136 @@ describe("AuthService", () => {
     });
   });
 
+  describe("recoverPassword", () => {
+    it("should set password recovery token, send password recovery email and return user email", async () => {
+      const mockUser = mockUsers[0];
+
+      const request: RecoverPasswordRequest = { email: mockUser.email };
+
+      const response = await authService.recoverPassword(request);
+
+      const databaseUsers = await userRepository.findAll();
+
+      expect(databaseUsers).toEqual(
+        expect.arrayContaining(
+          mockUsers.map((user) =>
+            user.id === mockUser.id
+              ? {
+                  ...user,
+                  password: expect.any(String),
+                  recoveryToken: expect.any(String),
+                  updatedAt: expect.any(Date),
+                }
+              : { ...user, password: expect.any(String) }
+          )
+        )
+      );
+
+      expect(response).toBe(mockUser.email);
+    });
+  });
+
+  describe("resetPassword", () => {
+    it("should reset password and return user email", async () => {
+      const mockUser = mockUsers[5];
+
+      const request: ResetPasswordRequest = {
+        token: mockUser.recoveryToken!,
+        newPassword: "new-password",
+      };
+
+      const response = await authService.resetPassword(request);
+
+      const databaseUsers = await userRepository.findAll();
+
+      const databaseUser = databaseUsers.find(
+        (user) => user.id === mockUser.id
+      );
+
+      if (databaseUser == null) {
+        fail("Expected user to be found");
+      }
+
+      const isPasswordCorrect = await bcrypt.compare(
+        request.newPassword,
+        databaseUser.password
+      );
+
+      expect(isPasswordCorrect).toBe(true);
+
+      expect(databaseUsers).toEqual(
+        expect.arrayContaining(
+          mockUsers.map((user) =>
+            user.id === mockUser.id
+              ? {
+                  ...user,
+                  password: expect.any(String),
+                  recoveryToken: null,
+                  updatedAt: expect.any(Date),
+                }
+              : { ...user, password: expect.any(String) }
+          )
+        )
+      );
+
+      expect(response).toBe(mockUser.email);
+    });
+  });
+
   describe("refreshToken", () => {
-    it("should revoke session when refresh token is revoked", async () => {
-      const targetMockRefreshToken = mockRefreshTokens.find(
+    it("should throw an unauthorized error and revoke session when refresh token is revoked", async () => {
+      const mockRefreshToken = mockRefreshTokens.find(
         (refreshToken) => refreshToken.isRevoked
       )!;
 
-      const response = await authService.refreshToken(
-        targetMockRefreshToken.token
-      );
+      try {
+        await authService.refreshToken(mockRefreshToken.token);
+
+        fail("Expected to throw unauthorized error");
+      } catch (error) {
+        expect(error).toBeInstanceOf(ApplicationError);
+        expect((error as ApplicationError).code).toBe(
+          ApplicationErrorCode.Unauthorized
+        );
+      }
 
       const databaseRefreshTokens = await refreshTokenRepository.findAll({
-        sessionId: targetMockRefreshToken.sessionId,
+        sessionId: mockRefreshToken.sessionId,
       });
-
-      expect(response).toEqual({ isValid: false });
 
       expect(databaseRefreshTokens).toEqual(
         expect.arrayContaining(
           mockRefreshTokens
             .filter(
               (refreshToken) =>
-                refreshToken.sessionId === targetMockRefreshToken.sessionId
+                refreshToken.sessionId === mockRefreshToken.sessionId
             )
-            .map((refreshToken) =>
-              expect.objectContaining({
-                ...refreshToken,
-                isRevoked: true,
-                updatedAt: expect.any(Date),
-              })
-            )
+            .map((refreshToken) => ({
+              ...refreshToken,
+              isRevoked: true,
+              updatedAt: expect.any(Date),
+            }))
         )
       );
     });
 
-    it("should revoke expired token", async () => {
+    it("should throw a session expired error and revoke expired token", async () => {
       const mockRefreshToken = mockRefreshTokens[1];
 
-      const response = await authService.refreshToken(mockRefreshToken.token);
+      try {
+        await authService.refreshToken(mockRefreshToken.token);
+
+        fail("Expected to throw session expired error");
+      } catch (error) {
+        expect(error).toBeInstanceOf(ApplicationError);
+        expect((error as ApplicationError).code).toBe(
+          ApplicationErrorCode.SessionExpired
+        );
+      }
 
       const databaseRefreshToken = await refreshTokenRepository.findOne({
         token: mockRefreshToken.token,
       });
-
-      expect(response).toEqual({ isValid: false });
 
       expect(databaseRefreshToken).toEqual({
         ...mockRefreshToken,
@@ -357,23 +500,47 @@ describe("AuthService", () => {
       const mockSession = mockSessions[mockSessions.length - 1];
       const mockRefreshToken = mockRefreshTokens[mockRefreshTokens.length - 1];
 
-      const response = await authService.refreshToken(mockRefreshToken.token);
-
-      if (!response.isValid) {
-        fail("Expected refresh token to be valid.");
-      }
+      const result = await authService.refreshToken(mockRefreshToken.token);
 
       const databaseRefreshToken = await refreshTokenRepository.findOne({
         id: mockRefreshToken.id,
       });
 
       const databaseNewRefreshToken = await refreshTokenRepository.findOne({
-        token: response.refreshToken,
+        token: result.refreshToken,
       });
 
       if (databaseNewRefreshToken == null) {
         fail("Expected new refresh token to be created.");
       }
+
+      expect(
+        jsonwebtoken.verify(result.accessToken, config.ACCESS_TOKEN_SECRET)
+      ).toEqual(
+        expect.objectContaining({
+          session: {
+            id: mockSession.id,
+            expiresAt: mockSession.expiresAt.toISOString(),
+            userId: mockSession.userId,
+            createdAt: mockSession.createdAt?.toISOString(),
+          },
+          user: { id: mockUser.id, name: mockUser.name, email: mockUser.email },
+        })
+      );
+
+      expect(
+        jsonwebtoken.verify(result.refreshToken, config.REFRESH_TOKEN_SECRET)
+      ).toEqual(
+        expect.objectContaining({
+          session: {
+            id: mockSession.id,
+            expiresAt: mockSession.expiresAt.toISOString(),
+            userId: mockSession.userId,
+            createdAt: mockSession.createdAt?.toISOString(),
+          },
+          user: { id: mockUser.id, name: mockUser.name, email: mockUser.email },
+        })
+      );
 
       expect(databaseRefreshToken).toEqual({
         ...mockRefreshToken,
@@ -381,19 +548,17 @@ describe("AuthService", () => {
         updatedAt: expect.any(Date),
       });
 
-      expect(databaseNewRefreshToken).toEqual(
-        expect.objectContaining({
-          sessionId: mockRefreshToken.sessionId,
-          isRevoked: false,
-        })
-      );
+      expect(databaseNewRefreshToken).toEqual({
+        id: expect.any(String),
+        token: expect.any(String),
+        isRevoked: false,
+        expiresAt: mockSession.expiresAt,
+        sessionId: mockSession.id,
+        createdAt: expect.any(Date),
+        updatedAt: expect.any(Date),
+      });
 
-      expect(
-        databaseNewRefreshToken.expiresAt.getTime()
-      ).toBeGreaterThanOrEqual(addDays(new Date(), 6).getTime());
-
-      expect(response).toEqual({
-        isValid: true,
+      expect(result).toEqual({
         accessToken: expect.any(String),
         refreshToken: expect.any(String),
         authContext: expect.objectContaining({

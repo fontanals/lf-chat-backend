@@ -14,6 +14,9 @@ describe("DataContext", () => {
     password: "password",
     displayName: `User ${index + 1}`,
     customPrompt: null,
+    verificationToken: null,
+    recoveryToken: null,
+    isVerified: true,
     createdAt: new Date(),
     updatedAt: new Date(),
   }));
@@ -27,6 +30,9 @@ describe("DataContext", () => {
         password,
         display_name AS "displayName",
         custom_prompt AS "customPrompt",
+        verification_token AS "verificationToken",
+        recovery_token AS "recoveryToken",
+        is_verified AS "isVerified",
         created_at AS "createdAt",
         updated_at AS "updatedAt"
       FROM "user";`
@@ -36,9 +42,9 @@ describe("DataContext", () => {
   const insertUser = async (user: User) => {
     await dataContext.execute(
       `INSERT INTO "user"
-      (id, name, email, password, display_name, custom_prompt)
+      (id, name, email, password, display_name, custom_prompt, verification_token, recovery_token, is_verified)
       VALUES
-      ($1, $2, $3, $4, $5, $6);`,
+      ($1, $2, $3, $4, $5, $6, $7, $8, $9);`,
       [
         user.id,
         user.name,
@@ -46,6 +52,9 @@ describe("DataContext", () => {
         user.password,
         user.displayName,
         user.customPrompt,
+        user.verificationToken,
+        user.recoveryToken,
+        user.isVerified,
       ]
     );
   };
@@ -79,8 +88,9 @@ describe("DataContext", () => {
         password: "password",
         displayName: "New User",
         customPrompt: null,
-        createdAt: new Date(),
-        updatedAt: new Date(),
+        verificationToken: "verification-token",
+        recoveryToken: null,
+        isVerified: false,
       };
 
       await insertUser(newUser);
@@ -109,6 +119,9 @@ describe("DataContext", () => {
         password: "password",
         displayName: "New User",
         customPrompt: null,
+        verificationToken: "verification-token",
+        recoveryToken: null,
+        isVerified: false,
       });
 
       await dataContext.rollback();
@@ -126,6 +139,9 @@ describe("DataContext", () => {
         password: "password",
         displayName: "New User",
         customPrompt: null,
+        verificationToken: "verification-token",
+        recoveryToken: null,
+        isVerified: false,
       };
 
       await dataContext.begin();

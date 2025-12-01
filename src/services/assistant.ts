@@ -36,7 +36,7 @@ import { AiService } from "./ai";
 import { MockAssistantService } from "./assistant-mock";
 import { ILogger } from "./logger";
 
-export type AssistantMode = "open-ai" | "mock";
+export type AssistantStatus = "open-ai" | "mock";
 
 export type SendMessageOptions = {
   previousMessages: Message[];
@@ -49,7 +49,8 @@ export type SendMessageOptions = {
 };
 
 export interface IAssistantService {
-  getMode(): Promise<AssistantMode>;
+  getStatus(): Promise<AssistantStatus>;
+  isContentValid(content: string): Promise<boolean>;
   generateChatTitle(messages: Message[]): Promise<string>;
   sendMessage(options: SendMessageOptions): Promise<AssistantMessage>;
 }
@@ -81,16 +82,27 @@ export class AssistantService implements IAssistantService {
     this.logger = logger;
   }
 
-  async getMode(): Promise<AssistantMode> {
+  async getStatus(): Promise<AssistantStatus> {
     const openAiGlobalUsage = await this.getOpenAiGlobalUsage();
 
-    const assistantMode =
+    const status =
       openAiGlobalUsage.totalCostInDollars >=
       config.OPENAI_MONTHLY_USAGE_LIMIT_IN_DOLLARS
         ? "mock"
         : "open-ai";
 
-    return assistantMode;
+    return status;
+  }
+
+  async isContentValid(content: string): Promise<boolean> {
+    const moderation = await this.aiService.createModeration({
+      model: "omni-moderation-latest",
+      input: content,
+    });
+
+    const isFlagged = moderation.results.some((result) => result.flagged);
+
+    return !isFlagged;
   }
 
   async generateChatTitle(messages: Message[]): Promise<string> {

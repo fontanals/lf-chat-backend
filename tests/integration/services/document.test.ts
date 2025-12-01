@@ -33,6 +33,9 @@ describe("DocumentService", () => {
     password: "password",
     displayName: "User 1",
     customPrompt: null,
+    verificationToken: null,
+    recoveryToken: null,
+    isVerified: true,
     createdAt: new Date(),
     updatedAt: new Date(),
   };
@@ -118,7 +121,7 @@ describe("DocumentService", () => {
 
       await fileStorage.deleteFile(databaseDocument.key);
 
-      expect(file.toString()).toEqual("Test file content");
+      expect(file.toString()).toBe("Test file content");
 
       expect(databaseDocuments).toEqual(
         expect.arrayContaining([

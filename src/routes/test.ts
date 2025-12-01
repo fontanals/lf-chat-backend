@@ -7,6 +7,17 @@ import { jsonRequestHandler, sseRequestHandler } from "../utils/express";
 export function createTestRoutes(serviceContainer: ServiceContainer) {
   const router = Router();
 
+  router.get(
+    "/data/users",
+    jsonRequestHandler(serviceContainer, async (req, res, services) => {
+      const testService = services.get("TestService");
+
+      const response = await testService.getUsers(req.query);
+
+      return response;
+    })
+  );
+
   router.post(
     "/data",
     jsonRequestHandler(serviceContainer, async (req, res, services) => {

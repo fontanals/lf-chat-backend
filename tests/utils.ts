@@ -23,9 +23,9 @@ export function createTestPool() {
 export async function insertUsers(users: User[], pool: Pool) {
   await pool.query(
     `INSERT INTO "user"
-    (id, name, email, password, display_name, custom_prompt, created_at, updated_at)
+    (id, name, email, password, display_name, custom_prompt, verification_token, recovery_token, is_verified, created_at, updated_at)
     VALUES
-    ${SqlUtils.values(users.length, 8)};`,
+    ${SqlUtils.values(users.length, 11)};`,
     users.flatMap((user) => [
       user.id,
       user.name,
@@ -33,6 +33,9 @@ export async function insertUsers(users: User[], pool: Pool) {
       user.password,
       user.displayName,
       user.customPrompt,
+      user.verificationToken,
+      user.recoveryToken,
+      user.isVerified,
       user.createdAt,
       user.updatedAt,
     ])

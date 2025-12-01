@@ -293,4 +293,12 @@ describe("ChatRepository", () => {
       expect(chat).toEqual({ ...mockChat, project: mockProject });
     });
   });
+
+  describe("deleteAll", () => {
+    it("should skip execution when both user id and project id params are not defined", async () => {
+      await chatRepository.deleteAll({});
+
+      expect(dataContext.execute).not.toHaveBeenCalled();
+    });
+  });
 });

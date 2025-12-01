@@ -3,6 +3,7 @@ import { Chat } from "../models/entities/chat";
 import { Project } from "../models/entities/project";
 import { ArrayUtils } from "../utils/arrays";
 import { NumberUtils } from "../utils/numbers";
+import { StringUtils } from "../utils/strings";
 import { CursorPagination, NullablePartial } from "../utils/types";
 
 type ChatQueryRow = {
@@ -34,6 +35,7 @@ export interface IChatRepository {
   create(chat: Chat): Promise<void>;
   update(id: string, chat: NullablePartial<Chat>): Promise<void>;
   delete(id: string): Promise<void>;
+  deleteAll(filters: ChatFilters): Promise<void>;
 }
 
 export class ChatRepository implements IChatRepository {
@@ -296,7 +298,24 @@ export class ChatRepository implements IChatRepository {
     );
   }
 
-  mapRowToChat(row: ChatQueryRow, includeProject: boolean): Chat {
+  async deleteAll(filters: ChatFilters): Promise<void> {
+    if (StringUtils.allAreNullOrWhitespace(filters.projectId, filters.userId)) {
+      return;
+    }
+
+    let paramsCount = 0;
+
+    await this.dataContext.execute(
+      `DELETE FROM "chat"
+      WHERE
+        ${filters.projectId != null ? `project_id = $${++paramsCount} AND` : ""}
+        ${filters.userId != null ? `user_id = $${++paramsCount} AND` : ""}
+        TRUE;`,
+      [filters.userId, filters.projectId].filter((param) => param != null)
+    );
+  }
+
+  private mapRowToChat(row: ChatQueryRow, includeProject: boolean): Chat {
     return {
       id: row.chatId,
       title: row.chatTitle,
@@ -308,7 +327,7 @@ export class ChatRepository implements IChatRepository {
     };
   }
 
-  mapRowToProject(row: ChatQueryRow): Project | null {
+  private mapRowToProject(row: ChatQueryRow): Project | null {
     if (row.projectId == null) {
       return null;
     }
@@ -323,7 +342,10 @@ export class ChatRepository implements IChatRepository {
     };
   }
 
-  mapRowsToChats(rows: ChatQueryRow[], includeProject: boolean): Chat[] {
+  private mapRowsToChats(
+    rows: ChatQueryRow[],
+    includeProject: boolean
+  ): Chat[] {
     return rows.map((row) => this.mapRowToChat(row, includeProject));
   }
 }

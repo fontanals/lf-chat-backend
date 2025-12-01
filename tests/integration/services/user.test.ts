@@ -4,10 +4,7 @@ import { addDays } from "date-fns";
 import { DataContext } from "../../../src/data/data-context";
 import { FileStorage } from "../../../src/files/file-storage";
 import { mapUserToDto, User } from "../../../src/models/entities/user";
-import {
-  ChangePasswordRequest,
-  UpdateUserRequest,
-} from "../../../src/models/requests/user";
+import { UpdateUserRequest } from "../../../src/models/requests/user";
 import { DocumentRepository } from "../../../src/repositories/document";
 import { UserRepository } from "../../../src/repositories/user";
 import { AuthContext } from "../../../src/services/auth";
@@ -34,6 +31,9 @@ describe("UserService", () => {
     password: "password",
     displayName: `User ${index + 1}`,
     customPrompt: null,
+    verificationToken: null,
+    recoveryToken: null,
+    isVerified: true,
     createdAt: addDays(new Date(), -100 + index),
     updatedAt: addDays(new Date(), -100 + index),
   }));
@@ -101,34 +101,6 @@ describe("UserService", () => {
           )
         )
       );
-
-      expect(response).toEqual(mockUser.id);
-    });
-  });
-
-  describe("changePassword", () => {
-    it("should change user password and return its id", async () => {
-      const request: ChangePasswordRequest = {
-        currentPassword: "password",
-        newPassword: "new-password",
-      };
-
-      const response = await userService.changePassword(request, authContext);
-
-      const databaseUser = await userRepository.findOne({ id: mockUser.id });
-
-      const isPasswordUpdated = await bcrypt.compare(
-        request.newPassword,
-        databaseUser!.password
-      );
-
-      expect(isPasswordUpdated).toBe(true);
-
-      expect(databaseUser).toEqual({
-        ...mockUser,
-        password: expect.any(String),
-        updatedAt: expect.any(Date),
-      });
 
       expect(response).toEqual(mockUser.id);
     });

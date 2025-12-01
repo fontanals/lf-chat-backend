@@ -1,4 +1,3 @@
-import bcrypt from "bcrypt";
 import { randomUUID } from "crypto";
 import { IDataContext } from "../../../src/data/data-context";
 import { IFileStorage } from "../../../src/files/file-storage";
@@ -27,6 +26,9 @@ describe("UserService", () => {
     password: "password",
     displayName: "User 1",
     customPrompt: null,
+    verificationToken: null,
+    recoveryToken: null,
+    isVerified: true,
     createdAt: new Date(),
     updatedAt: new Date(),
   };
@@ -65,7 +67,6 @@ describe("UserService", () => {
     };
 
     userRepository = {
-      count: jest.fn(),
       exists: jest.fn(),
       findAll: jest.fn(),
       findOne: jest.fn(),
@@ -83,6 +84,7 @@ describe("UserService", () => {
       create: jest.fn(),
       update: jest.fn(),
       delete: jest.fn(),
+      getAllUserChatDocuments: jest.fn(),
     };
 
     userService = new UserService(
@@ -118,7 +120,7 @@ describe("UserService", () => {
     });
 
     it("should update user and return its id", async () => {
-      userRepository.exists.mockResolvedValue(true);
+      userRepository.findOne.mockResolvedValue(mockUser);
 
       const response = await userService.updateUser(
         { name: "User Name Updated", displayName: "User" },
@@ -129,65 +131,9 @@ describe("UserService", () => {
     });
   });
 
-  describe("changePassword", () => {
-    it("should throw bad request error when request does not match schema", async () => {
-      try {
-        await userService.changePassword(
-          { currentPassword: mockUser.password } as any,
-          authContext
-        );
-
-        fail("Expected to throw bad request error");
-      } catch (error) {
-        expect(error).toBeInstanceOf(ApplicationError);
-        expect((error as ApplicationError).code).toBe(
-          ApplicationErrorCode.BadRequest
-        );
-      }
-    });
-
-    it("should throw invalid email or password error when current password is incorrect", async () => {
-      const hashedPassword = await bcrypt.hash(mockUser.password, 10);
-
-      userRepository.findOne.mockResolvedValue({
-        ...mockUser,
-        password: hashedPassword,
-      });
-
-      try {
-        await userService.changePassword(
-          { currentPassword: "wrong password", newPassword: "new password" },
-          authContext
-        );
-
-        fail("Expected to throw invalid email or password error");
-      } catch (error) {
-        expect(error).toBeInstanceOf(ApplicationError);
-        expect((error as ApplicationError).code).toBe(
-          ApplicationErrorCode.InvalidEmailOrPassword
-        );
-      }
-    });
-
-    it("should change user password and return its id", async () => {
-      const hashedPassword = await bcrypt.hash(mockUser.password, 10);
-
-      userRepository.findOne.mockResolvedValue({
-        ...mockUser,
-        password: hashedPassword,
-      });
-
-      const response = await userService.changePassword(
-        { currentPassword: mockUser.password, newPassword: "new password" },
-        authContext
-      );
-
-      expect(response).toEqual(mockUser.id);
-    });
-  });
-
   describe("deleteUser", () => {
     it("should delete user and return its id", async () => {
+      userRepository.findOne.mockResolvedValue(mockUser);
       documentRepository.findAll.mockResolvedValue([]);
 
       const response = await userService.deleteUser(authContext);

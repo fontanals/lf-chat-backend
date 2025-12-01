@@ -27,6 +27,32 @@ export const authPaths: OpenAPIV3.PathsObject = {
       },
     },
   },
+  "/api/verify-account": {
+    post: {
+      summary: "Verify account",
+      tags: ["Auth"],
+      requestBody: {
+        required: true,
+        content: {
+          "application/json": {
+            schema: { $ref: "#/components/schemas/VerifyAccountRequest" },
+          },
+        },
+      },
+      responses: {
+        "200": {
+          description: "Success",
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/VerifyAccountResponse" },
+            },
+          },
+        },
+        "400": { $ref: "#/components/responses/BadRequest" },
+        "500": { $ref: "#/components/responses/InternalServerError" },
+      },
+    },
+  },
   "/api/signin": {
     post: {
       summary: "Sign in existing user",
@@ -69,8 +95,9 @@ export const authPaths: OpenAPIV3.PathsObject = {
   },
   "/api/signout": {
     post: {
-      summary: "Sign out signed-in user",
+      summary: "Sign out user",
       tags: ["Auth"],
+      security: [{ BearerAuth: [] }],
       responses: {
         "200": {
           description: "Success",
@@ -81,6 +108,58 @@ export const authPaths: OpenAPIV3.PathsObject = {
           },
         },
         "401": { $ref: "#/components/responses/Unauthorized" },
+        "500": { $ref: "#/components/responses/InternalServerError" },
+      },
+    },
+  },
+  "/api/recover-password": {
+    post: {
+      summary: "Recover password",
+      tags: ["Auth"],
+      requestBody: {
+        required: true,
+        content: {
+          "application/json": {
+            schema: { $ref: "#/components/schemas/RecoverPasswordRequest" },
+          },
+        },
+      },
+      responses: {
+        "200": {
+          description: "Success",
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/RecoverPasswordResponse" },
+            },
+          },
+        },
+        "400": { $ref: "#/components/responses/BadRequest" },
+        "500": { $ref: "#/components/responses/InternalServerError" },
+      },
+    },
+  },
+  "/api/reset-password": {
+    post: {
+      summary: "Reset password",
+      tags: ["Auth"],
+      requestBody: {
+        required: true,
+        content: {
+          "application/json": {
+            schema: { $ref: "#/components/schemas/ResetPasswordRequest" },
+          },
+        },
+      },
+      responses: {
+        "200": {
+          description: "Success",
+          content: {
+            "application/json": {
+              schema: { $ref: "#/components/schemas/ResetPasswordResponse" },
+            },
+          },
+        },
+        "400": { $ref: "#/components/responses/BadRequest" },
         "500": { $ref: "#/components/responses/InternalServerError" },
       },
     },

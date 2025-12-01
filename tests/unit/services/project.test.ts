@@ -9,6 +9,7 @@ import {
   UpdateProjectRequest,
 } from "../../../src/models/requests/project";
 import { IProjectRepository } from "../../../src/repositories/project";
+import { IAssistantService } from "../../../src/services/assistant";
 import { AuthContext } from "../../../src/services/auth";
 import { ProjectService } from "../../../src/services/project";
 import {
@@ -20,6 +21,7 @@ describe("ProjectService", () => {
   let dataContext: jest.Mocked<IDataContext>;
   let fileStorage: jest.Mocked<IFileStorage>;
   let projectRepository: jest.Mocked<IProjectRepository>;
+  let assistantService: jest.Mocked<IAssistantService>;
   let projectService: ProjectService;
 
   const mockUser: User = {
@@ -29,6 +31,9 @@ describe("ProjectService", () => {
     password: "password",
     displayName: "User 1",
     customPrompt: null,
+    verificationToken: null,
+    recoveryToken: null,
+    isVerified: true,
     createdAt: new Date(),
     updatedAt: new Date(),
   };
@@ -84,10 +89,18 @@ describe("ProjectService", () => {
       delete: jest.fn(),
     };
 
+    assistantService = {
+      getStatus: jest.fn(),
+      isContentValid: jest.fn(),
+      generateChatTitle: jest.fn(),
+      sendMessage: jest.fn(),
+    };
+
     projectService = new ProjectService(
       dataContext,
       fileStorage,
-      projectRepository
+      projectRepository,
+      assistantService
     );
   });
 
@@ -102,7 +115,7 @@ describe("ProjectService", () => {
   });
 
   describe("getProject", () => {
-    it("should throw not found error when project does not exist", async () => {
+    it("should throw a not found error when project does not exist", async () => {
       projectRepository.findOne.mockResolvedValue(null);
 
       try {
@@ -137,7 +150,25 @@ describe("ProjectService", () => {
   });
 
   describe("createProject", () => {
-    it("should throw bad request error when request does not match schema", async () => {
+    it("should throw a bad request error when request does not match schema", async () => {
+      try {
+        await projectService.createProject(
+          { id: randomUUID() } as any,
+          authContext
+        );
+
+        fail("Expected to throw bad request error");
+      } catch (error) {
+        expect(error).toBeInstanceOf(ApplicationError);
+        expect((error as ApplicationError).code).toBe(
+          ApplicationErrorCode.BadRequest
+        );
+      }
+    });
+
+    it("should throw a bad request error when content is invalid", async () => {
+      assistantService.isContentValid.mockResolvedValue(false);
+
       try {
         await projectService.createProject(
           { id: randomUUID() } as any,
@@ -154,6 +185,8 @@ describe("ProjectService", () => {
     });
 
     it("should create project and return its id", async () => {
+      assistantService.isContentValid.mockResolvedValue(true);
+
       const request: CreateProjectRequest = {
         id: randomUUID(),
         title: "Learning Machine Learning",
@@ -167,7 +200,7 @@ describe("ProjectService", () => {
   });
 
   describe("updateProject", () => {
-    it("should throw bad request error when request does not match schema", async () => {
+    it("should throw a bad request error when request does not match schema", async () => {
       const mockProject = mockProjects[0];
 
       try {
@@ -186,7 +219,7 @@ describe("ProjectService", () => {
       }
     });
 
-    it("should throw not found error when project does not exist", async () => {
+    it("should throw a not found error when project does not exist", async () => {
       try {
         await projectService.updateProject(
           { projectId: randomUUID() },
@@ -203,10 +236,33 @@ describe("ProjectService", () => {
       }
     });
 
+    it("should throw a bad request error when content is invalid", async () => {
+      const mockProject = mockProjects[0];
+
+      assistantService.isContentValid.mockResolvedValue(false);
+
+      try {
+        await projectService.updateProject(
+          { projectId: mockProject.id },
+          { title: 123 } as any,
+          authContext
+        );
+
+        fail("Expected to throw bad request error");
+      } catch (error) {
+        expect(error).toBeInstanceOf(ApplicationError);
+        expect((error as ApplicationError).code).toBe(
+          ApplicationErrorCode.BadRequest
+        );
+      }
+    });
+
     it("should update project and return its id", async () => {
       const mockProject = mockProjects[0];
 
       projectRepository.exists.mockResolvedValue(true);
+
+      assistantService.isContentValid.mockResolvedValue(true);
 
       const request: UpdateProjectRequest = {
         title: "Project Title Updated",
@@ -223,7 +279,7 @@ describe("ProjectService", () => {
   });
 
   describe("deleteProject", () => {
-    it("should throw not found error when project does not exist", async () => {
+    it("should throw a not found error when project does not exist", async () => {
       try {
         await projectService.deleteProject(
           { projectId: randomUUID() },

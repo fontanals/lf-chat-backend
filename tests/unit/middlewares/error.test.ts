@@ -5,8 +5,8 @@ import { ILogger } from "../../../src/services/logger";
 import {
   ApplicationError,
   ApplicationErrorCode,
+  HttpStatusCode,
 } from "../../../src/utils/errors";
-import { HttpStatusCode } from "../../../src/utils/types";
 
 describe("errorMiddleware", () => {
   let services: jest.Mocked<IServiceProvider>;

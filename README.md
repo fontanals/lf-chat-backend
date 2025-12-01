@@ -1,488 +1,130 @@
 # LF Chat Backend
 
-A Node.js REST API backend for an AI-powered chat application. Built with Express.js, TypeScript, OpenAI integration, document processing with embeddings, and PostgreSQL.
-
-## Table of Contents
-
-- [Overview](#overview)
-- [Features](#features)
-- [Tech Stack](#tech-stack)
-- [Prerequisites](#prerequisites)
-- [Installation](#installation)
-- [Configuration](#configuration)
-- [Running the Application](#running-the-application)
-- [API Documentation](#api-documentation)
-- [Project Structure](#project-structure)
-- [Architecture](#architecture)
-- [Database](#database)
-- [Testing](#testing)
-- [Docker](#docker)
-- [Environment Variables](#environment-variables)
-- [Troubleshooting](#troubleshooting)
-
-## Overview
-
-This is a backend API for a chat application that integrates with OpenAI. Key capabilities include:
-
-- User authentication with JWT tokens
-- Real-time message streaming via Server-Sent Events (SSE)
-- PDF document upload and processing with embeddings
-- Vector similarity search for document retrieval
-- Cost tracking with configurable usage limits
-- Multi-user project and chat organization
+REST API for an AI chat application similar to ChatGPT and Claude.ai. Users can have conversations with an AI assistant, create projects and upload documents for context-aware responses using RAG (Retrieval-Augmented Generation).
 
 ## Features
 
-### Authentication
-- User signup/signin with bcrypt password hashing
-- JWT-based access and refresh tokens
-- Session management
-- Rate limiting on signup
+- **OpenAI Integration**: Real-time streaming conversations with OpenAI models through Server-Sent Events (SSE)
+- **Conversation Branching**: Edit and resend messages from any point in the conversation to explore different response paths while maintaining full conversation history in a tree structure
+- **Project Organization**: Group chats and documents into projects for better organization and context-focused responses
+- **RAG**: Upload PDF and TXT documents for context-aware responses using RAG (Retrieval-Augmented Generation) with vector search
+- **File Upload**: File upload using AWS S3 as file storage
+- **Authentication**: Authentication with JWT access and refresh tokens
+- **OpenAI Usage Tracking**: OpenAI API usage tracking with configurable monthly cost limits and mock responses when limit is reached
+- **Logging**: File logger with daily rotation using Winston
+- **Docker Multi-Environment Setup**: Dedicated environment setups using Docker Compose
+- **Automated Tests**: Unit and integration tests using Jest
 
-### Chat
-- Create and manage conversations within projects
-- Send messages with OpenAI integration
-- Real-time streaming responses
-- Message feedback tracking
-- Message history
+## Technologies
 
-### Documents
-- Upload PDF files to AWS S3
-- Parse and chunk documents
-- Generate embeddings using OpenAI
-- Store embeddings in PostgreSQL with pgvector
-- Retrieve relevant chunks for chat context
-
-### Projects
-- Create and manage projects
-- Organize chats and documents within projects
-- User-based access control
-
-## Tech Stack
-
-- **Runtime**: Node.js + TypeScript
-- **Web Framework**: Express.js 5.1.0
-- **Database**: PostgreSQL with pgvector extension
-- **AI**: OpenAI API, Vercel AI SDK
-- **Cloud Storage**: AWS S3
-- **Authentication**: JWT, bcrypt
-- **Validation**: Zod
-- **Logging**: Winston with daily rotation
-- **File Upload**: Multer
-- **Rate Limiting**: express-rate-limit
-- **Testing**: Jest, Supertest
-- **API Docs**: Swagger/OpenAPI with swagger-ui-express
+- Typescript
+- Express JS
+- PostgreSQL
+- PG Vector
+- Vercel AI SDK
+- AWS S3 SDK
+- OAuth 2.0 Authentication using JWT
+- OpenAPI documentation with Swagger
+- Jest
+- Docker
+- Docker Compose
+- CI with Github Actions
 
 ## Prerequisites
 
-- Node.js v18 or higher
-- npm v8 or higher
-- PostgreSQL v12 or higher with pgvector extension
-- AWS S3 bucket credentials
-- OpenAI API key
-
-### PostgreSQL Setup
-
-```bash
-# Install pgvector (choose based on your OS)
-# macOS
-brew install pgvector
-
-# Ubuntu/Debian
-sudo apt-get install postgresql-contrib
-psql -c "CREATE EXTENSION vector;"
-
-# Windows - download from https://github.com/pgvector/pgvector/releases
-
-# Create database
-createdb ai_chat
-
-# Enable pgvector extension
-psql ai_chat -c "CREATE EXTENSION IF NOT EXISTS vector;"
-```
-
-## Installation
-
-1. Clone the repository
-
-```bash
-git clone https://github.com/yourusername/ai-chat-backend.git
-cd ai-chat-backend
-```
-
-2. Install dependencies
-
-```bash
-npm install
-```
-
-3. Set up environment variables
-
-```bash
-cp .env.example .env
-# Edit .env with your configuration
-```
-
-4. Initialize database schema
-
-```bash
-psql ai_chat < src/data/schema.sql
-```
-
-Or use Docker (see Docker section below).
-
-5. Build and verify
-
-```bash
-npm run build
-npm test
-```
-
-## Configuration
-
-Create a `.env` file with the following critical variables:
-
-```bash
-# Server
-PORT=3000
-LOGS_PATH=logs
-
-# Database
-POSTGRES_HOST=localhost
-POSTGRES_PORT=5432
-POSTGRES_USER=postgres
-POSTGRES_PASSWORD=your_password
-POSTGRES_DB=ai_chat
-
-# JWT Secrets (min 32 characters)
-ACCESS_TOKEN_SECRET=your_secret_key_min_32_chars
-REFRESH_TOKEN_SECRET=your_secret_key_min_32_chars
-
-# OpenAI
-OPENAI_API_KEY=sk-...
-OPENAI_MAIN_MODEL=gpt-4o-mini
-OPENAI_LOW_MODEL=gpt-5-nano
-OPENAI_MONTHLY_USAGE_LIMIT_IN_DOLLARS=15
-
-# AWS S3
-AWS_REGION=us-east-1
-AWS_S3_BUCKET_NAME=your-bucket-name
-AWS_ACCESS_KEY_ID=your_key
-AWS_SECRET_ACCESS_KEY=your_secret
-
-# Document Processing
-CHUNK_SIZE=500
-CHUNK_OVERLAP=50
-
-# Rate Limiting
-ENABLE_RATE_LIMITING=true
-DEFAULT_RATE_LIMIT_WINDOW_IN_MINUTES=15
-DEFAULT_RATE_LIMIT_MAX_REQUESTS=100
-SIGNUP_RATE_LIMIT_WINDOW_IN_MINUTES=60
-SIGNUP_RATE_LIMIT_MAX_REQUESTS=1
-```
-
-See [Environment Variables](#environment-variables) for complete reference.
-
-## Running the Application
-
-### Development
-
-```bash
-npm run dev
-```
-
-Starts with hot-reload on `http://localhost:3000`
-
-### Production Build
-
-```bash
-npm run build
-npm start
-```
-
-### Testing
-
-```bash
-npm test                             # All tests
-npm run test:unit                    # Unit tests only
-npm run test:integration             # Integration tests only
-npm test -- --coverage               # With coverage report
-```
-
-## API Documentation
-
-Once running, visit the interactive API docs:
-
-```
-http://localhost:3000/api/docs
-```
-
-### Main Endpoints
-
-**Auth**
-- `POST /api/auth/signup` - Register user
-- `POST /api/auth/signin` - Login user
-- `POST /api/auth/refresh-token` - Refresh access token
-- `POST /api/auth/logout` - Logout
-
-**User**
-- `GET /api/user` - Get profile
-- `PUT /api/user` - Update profile
-- `DELETE /api/user` - Delete account
-
-**Projects**
-- `GET /api/projects` - List projects
-- `POST /api/projects` - Create project
-- `PUT /api/projects/:id` - Update project
-- `DELETE /api/projects/:id` - Delete project
-
-**Chats**
-- `GET /api/chats/:projectId` - List chats
-- `POST /api/chats` - Create chat
-- `GET /api/chats/:id/messages` - Get messages
-- `POST /api/chats/:id/messages` - Send message (streaming)
-- `PUT /api/chats/:id/messages/:messageId/feedback` - Add feedback
-- `DELETE /api/chats/:id` - Delete chat
-
-**Documents**
-- `POST /api/documents` - Upload document
-- `GET /api/documents/:projectId` - List documents
-- `DELETE /api/documents/:id` - Delete document
-
-**Health**
-- `GET /api` - Health check
-
-## Project Structure
-
-```
-src/
-├── index.ts                                   # Entry point
-├── app.ts                                     # Express setup & routes
-├── config.ts                                  # Config validation
-├── service-provider.ts                        # Dependency injection
-├── routes/                                    # Route handlers
-│   ├── auth.ts
-│   ├── user.ts
-│   ├── projects.ts
-│   ├── chats.ts
-│   └── documents.ts
-├── services/                                  # Business logic
-│   ├── logger.ts
-│   ├── ai.ts
-│   ├── assistant.ts
-│   ├── auth.ts
-│   ├── user.ts
-│   ├── project.ts
-│   ├── chat.ts
-│   └── document.ts
-├── repositories/                              # Data access
-│   ├── user.ts
-│   ├── session.ts
-│   ├── project.ts
-│   ├── chat.ts
-│   ├── message.ts
-│   ├── document.ts
-│   └── document-chunk.ts
-├── data/                                      # Database layer
-│   ├── pool.ts
-│   ├── data-context.ts
-│   └── schema.sql
-├── middlewares/                               # Express middlewares
-│   ├── auth.ts
-│   ├── error.ts
-│   └── upload.ts
-├── files/                                     # File storage
-│   ├── file-storage.ts
-│   └── s3-client.ts
-├── models/                                    # Type definitions
-│   ├── entities/
-│   ├── requests/
-│   └── responses/
-├── docs/                                      # API documentation
-│   └── swagger.ts
-└── utils/                                     # Utilities
-    ├── constants.ts
-    ├── errors.ts
-    ├── sql.ts
-    └── ...
-
-tests/
-├── unit/                                      # Unit tests
-└── integration/                               # Integration tests
-```
-
-## Architecture
-
-### Layering
-
-```
-Routes (HTTP handlers)
-    ↓
-Services (Business logic)
-    ↓
-Repositories (Data access)
-    ↓
-Database (PostgreSQL)
-```
-
-### Design Patterns
-
-1. **Dependency Injection** - ServiceContainer manages service instantiation
-2. **Repository Pattern** - Data access abstraction for easy testing and swapping
-3. **Service Layer** - Business logic separated from route handlers
-4. **Middleware Chain** - Auth, error handling, file uploads via Express middleware
-5. **Error Handling** - Custom application errors with HTTP status codes
-
-### Key Components
-
-**ServiceContainer**: Central DI container for service wiring.
-
-**Assistant Service**: Orchestrates AI interactions including streaming, embeddings, cost tracking, and fallback behavior.
-
-**Document Processing**: Splits PDFs into chunks, generates embeddings, stores in pgvector.
-
-**Authentication**: JWT tokens with session tracking and secure password hashing.
-
-## Database
-
-### Schema
-
-Core tables:
-- `user` - User accounts
-- `session` - User sessions
-- `refresh_token` - Token management
-- `project` - User projects
-- `chat` - Conversations
-- `message` - Chat messages with feedback
-- `document` - Uploaded documents with S3 keys
-- `document_chunk` - Chunks with OpenAI embeddings
-- `open_ai_model_usage` - Cost tracking
-
-### Vector Search
-
-Document chunks use 1536-dimensional OpenAI embeddings stored via pgvector. Similarity search uses cosine distance for semantic matching.
-
-## Testing
-
-```bash
-# All tests
-npm test
-
-# Watch mode
-npm test -- --watch
-
-# With coverage
-npm test -- --coverage
-
-# Specific file
-npm test -- tests/unit/services/auth.test.ts
-
-# Unit only
-npm run test:unit
-
-# Integration only
-npm run test:integration
-```
-
-Integration tests use a separate PostgreSQL instance (port 5434).
-
-## Docker
-
-### Docker Compose (Development)
-
-```bash
-# Start all services
-docker-compose up -d
-
-# View logs
-docker-compose logs -f app
-
-# Stop services
-docker-compose down
-```
-
-Services:
-- **app**: Node.js backend (port 3000)
-- **postgres**: Main database (port 5433)
-- **postgres-test**: Test database (port 5434)
-
-### Build Docker Image
-
-```bash
-docker build -t ai-chat-backend:latest .
-docker run -d -p 3000:3000 --env-file .env ai-chat-backend:latest
-```
+- [Docker](https://www.docker.com/) and Docker Compose
+- [OpenAI API](https://platform.openai.com/) key
+- [AWS S3](https://aws.amazon.com/s3/) bucket for file storage
 
 ## Environment Variables
 
-| Variable | Type | Default | Required | Description |
-|----------|------|---------|----------|-------------|
-| `PORT` | number | `3000` | No | Server port |
-| `LOGS_PATH` | string | `logs` | No | Log directory |
-| `POSTGRES_HOST` | string | `localhost` | Yes | PostgreSQL host |
-| `POSTGRES_PORT` | number | `5432` | No | PostgreSQL port |
-| `POSTGRES_USER` | string | `postgres` | Yes | PostgreSQL user |
-| `POSTGRES_PASSWORD` | string | - | Yes | PostgreSQL password |
-| `POSTGRES_DB` | string | `ai_chat` | Yes | Database name |
-| `ACCESS_TOKEN_SECRET` | string | - | Yes | JWT secret (min 32 chars) |
-| `REFRESH_TOKEN_SECRET` | string | - | Yes | Refresh token secret (min 32 chars) |
-| `OPENAI_API_KEY` | string | - | Yes | OpenAI API key |
-| `OPENAI_MAIN_MODEL` | string | `gpt-4o-mini` | No | Primary model |
-| `OPENAI_LOW_MODEL` | string | `gpt-5-nano` | No | Fallback model |
-| `OPENAI_MONTHLY_USAGE_LIMIT_IN_DOLLARS` | number | `15` | No | Monthly budget |
-| `AWS_REGION` | string | `us-east-1` | Yes | AWS region |
-| `AWS_S3_BUCKET_NAME` | string | - | Yes | S3 bucket |
-| `AWS_ACCESS_KEY_ID` | string | - | Yes | AWS access key |
-| `AWS_SECRET_ACCESS_KEY` | string | - | Yes | AWS secret key |
-| `CHUNK_SIZE` | number | `500` | No | Document chunk size |
-| `CHUNK_OVERLAP` | number | `50` | No | Chunk overlap |
-| `ENABLE_RATE_LIMITING` | boolean | `false` | No | Enable rate limiting |
-| `DEFAULT_RATE_LIMIT_WINDOW_IN_MINUTES` | number | `15` | No | Rate limit window |
-| `DEFAULT_RATE_LIMIT_MAX_REQUESTS` | number | `100` | No | Requests per window |
-| `SIGNUP_RATE_LIMIT_WINDOW_IN_MINUTES` | number | `60` | No | Signup window |
-| `SIGNUP_RATE_LIMIT_MAX_REQUESTS` | number | `1` | No | Signups per window |
-| `MAX_USERS` | number | `100` | No | Max user accounts |
-| `MAX_DOCUMENTS_PER_USER` | number | `10` | No | Docs per user limit |
+1. Copy ".env.example" to ".env" for development, ".env.test" for test, and ".env.prod" for production
+2. Replace the placeholder values with your own
 
-## Troubleshooting
+| Variable                                | Description                                                                         |
+| --------------------------------------- | ----------------------------------------------------------------------------------- |
+| `PORT`                                  | Server port                                                                         |
+| `LOGS_PATH`                             | Directory for log files                                                             |
+| `POSTGRES_HOST`                         | PostgreSQL host                                                                     |
+| `POSTGRES_PORT`                         | PostgreSQL port                                                                     |
+| `POSTGRES_USER`                         | PostgreSQL user                                                                     |
+| `POSTGRES_PASSWORD`                     | PostgreSQL password                                                                 |
+| `POSTGRES_DB`                           | PostgreSQL database name                                                            |
+| `ACCOUNT_VERIFICATION_TOKEN_SECRET`     | Secret for signing JWT account verification tokens                                  |
+| `ACCESS_TOKEN_SECRET`                   | Secret for signing JWT access tokens                                                |
+| `REFRESH_TOKEN_SECRET`                  | Secret for signing JWT refresh tokens                                               |
+| `PASSWORD_RECOVERY_TOKEN_SECRET`        | Secret for signing JWT password recovery tokens                                     |
+| `SMTP_HOST`                             | SMTP host                                                                           |
+| `SMTP_PORT`                             | SMTP port                                                                           |
+| `SMTP_USER`                             | SMTP user                                                                           |
+| `SMTP_PASSWORD`                         | SMTP password                                                                       |
+| `SUPPORT_EMAIL`                         | Support email address for sending account verification and password recovery emails |
+| `AWS_REGION`                            | AWS region                                                                          |
+| `AWS_S3_BUCKET_NAME`                    | S3 bucket name for file storage                                                     |
+| `AWS_ACCESS_KEY_ID`                     | AWS access key ID                                                                   |
+| `AWS_SECRET_ACCESS_KEY`                 | AWS secret access key                                                               |
+| `OPENAI_API_KEY`                        | OpenAI API key                                                                      |
+| `OPENAI_MAIN_MODEL`                     | Primary OpenAI model (`gpt-5-nano` or `gpt-4o-mini`)                                |
+| `OPENAI_LOW_MODEL`                      | Secondary model for lighter tasks (`gpt-5-nano` or `gpt-4o-mini`)                   |
+| `OPENAI_MONTHLY_USAGE_LIMIT_IN_DOLLARS` | Monthly spending limit for OpenAI                                                   |
+| `CHUNK_SIZE`                            | Document chunk size in characters                                                   |
+| `CHUNK_OVERLAP`                         | Overlap between chunks                                                              |
+| `ENABLE_RATE_LIMITING`                  | Enable rate limiting                                                                |
+| `RATE_LIMIT_WINDOW_IN_MINUTES`          | Rate limit window                                                                   |
+| `RATE_LIMIT_MAX_REQUESTS`               | Max requests per window                                                             |
+| `MAX_DOCUMENTS_PER_USER`                | Maximum documents per user                                                          |
 
-### PostgreSQL Connection Error
+## Running the Project
 
-```bash
-psql --version
-psql -l | grep ai_chat
-# Check POSTGRES_HOST, POSTGRES_PORT in .env
-```
-
-### pgvector Not Found
-
-```bash
-psql ai_chat -c "CREATE EXTENSION IF NOT EXISTS vector;"
-psql ai_chat -c "\dx vector"
-```
-
-### OpenAI API Error (401)
-
-- Verify `OPENAI_API_KEY` is correct
-- Check API key has sufficient credits
-- Ensure permissions allow the models being used
-
-### S3 Access Issues
-
-- Verify AWS credentials in `.env`
-- Check IAM permissions include `s3:GetObject`, `s3:PutObject`
-- Verify bucket name and region match configuration
-
-### Tests Failing
+1. Install Docker
+2. Clone the repository
+3. Setup environment variables
+4. Run one of the following commands:
 
 ```bash
-docker-compose up -d postgres-test
-npm test -- --verbose
+# Development
+docker compose up
+
+# Test
+docker compose --env-file .env.test -f docker-compose.test.yml up
+
+# Production
+docker compose --env-file .env.prod -f docker-compose.prod.yml up
 ```
 
----
+5. Open `http://localhost:${PORT}/api/docs` in your browser to view OpenAPI documentation
+
+If you do not want to use Docker, you can have Node.js 22+ and PostgreSQL on your host machine instead of containers.
+
+## Architecture
+
+The application follows a **layered architecture** pattern:
+
+```
+Routes (HTTP Layer)
+    ↓
+Middlewares (Auth, Upload, Error Handling)
+    ↓
+Services (Business Logic)
+    ↓
+Repositories (Data Access)
+    ↓
+Data Context (PostgreSQL Driver Wrapper)
+    ↓
+PostgreSQL
+```
+
+## Testing
+
+- **Unit tests** (`tests/unit/`): Individual components in isolation with mocked dependencies
+- **Integration tests** (`tests/integration/`): Full request/response cycles with real third-party services
+
+Run `npm run test:unit` for running unit tests only
+
+Run `npm run test:integration` for running integration tests only (needs test database running)
+
+Run `npm run test` for running unit and integration tests
 
 ## License
 
-MIT License - see LICENSE file for details.
+MIT

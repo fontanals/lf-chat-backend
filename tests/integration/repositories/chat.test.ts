@@ -26,6 +26,9 @@ describe("ChatRepository", () => {
     password: "password",
     displayName: `User ${index + 1}`,
     customPrompt: null,
+    verificationToken: null,
+    recoveryToken: null,
+    isVerified: true,
     createdAt: new Date(),
     updatedAt: new Date(),
   }));
@@ -305,6 +308,36 @@ describe("ChatRepository", () => {
       expect(databaseChats).toEqual(
         expect.arrayContaining(
           mockChats.filter((chat) => chat.id !== mockChat.id)
+        )
+      );
+    });
+  });
+
+  describe("deleteAll", () => {
+    it("should delete all user chats", async () => {
+      const mockUser = mockUsers[0];
+
+      await chatRepository.deleteAll({ userId: mockUser.id });
+
+      const databaseChats = await chatRepository.findAll();
+
+      expect(databaseChats).toEqual(
+        expect.arrayContaining(
+          mockChats.filter((chat) => chat.userId !== mockUser.id)
+        )
+      );
+    });
+
+    it("should delete all project chats", async () => {
+      const mockProject = mockProjects[0];
+
+      await chatRepository.deleteAll({ projectId: mockProject.id });
+
+      const databaseChats = await chatRepository.findAll();
+
+      expect(databaseChats).toEqual(
+        expect.arrayContaining(
+          mockChats.filter((chat) => chat.projectId !== mockProject.id)
         )
       );
     });

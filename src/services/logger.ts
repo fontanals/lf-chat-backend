@@ -26,14 +26,16 @@ export class Logger {
       level: "info",
       format: format.combine(
         format.timestamp(),
+        format.metadata({ fillExcept: ["timestamp", "level", "message"] }),
         format.printf(
           (info) =>
             `${info.timestamp} [${info.level}]: ${info.message}${
-              info.meta != null ? ` ${JSON.stringify(info.meta)}` : ""
+              Object.keys(info.metadata!).length > 0
+                ? ` - Metadata: ${JSON.stringify(info.metadata)}`
+                : ""
             }`
         )
       ),
-      defaultMeta: { service: "user-service" },
       transports: [
         new transports.Console({ level: "debug" }),
         new transports.DailyRotateFile({
@@ -42,7 +44,7 @@ export class Logger {
           datePattern: "YYYY-MM-DD",
           zippedArchive: true,
           maxSize: "5m",
-          maxFiles: "5d",
+          maxFiles: 5,
         }),
       ],
     });

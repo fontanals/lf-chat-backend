@@ -4,6 +4,10 @@ import { Message, UserContentBlock } from "../entities/message";
 import { Project } from "../entities/project";
 import { User } from "../entities/user";
 
+export type GetUsersQuery = {
+  email?: string;
+};
+
 export type CreateTestDataRequest = {
   users?: User[];
   projects?: Project[];

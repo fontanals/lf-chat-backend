@@ -28,15 +28,16 @@ import { MockAssistantService } from "./services/assistant-mock";
 import { AuthService, IAuthService } from "./services/auth";
 import { ChatService, IChatService } from "./services/chat";
 import { DocumentService, IDocumentService } from "./services/document";
+import { EmailService, IEmailService } from "./services/email";
 import { ILogger, Logger } from "./services/logger";
 import { IProjectService, ProjectService } from "./services/project";
 import { ITestService, TestService } from "./services/test";
 import { IUserService, UserService } from "./services/user";
 
 type ServiceMap = {
+  Logger: ILogger;
   DataContext: IDataContext;
   FileStorage: IFileStorage;
-  Logger: ILogger;
   UserRepository: IUserRepository;
   SessionRepository: ISessionRepository;
   RefreshTokenRepository: IRefreshTokenRepository;
@@ -46,6 +47,7 @@ type ServiceMap = {
   DocumentRepository: IDocumentRepository;
   DocumentChunkRepository: IDocumentChunkRepository;
   OpenAiModelUsageRepository: IOpenAiModelUsageRepository;
+  EmailService: IEmailService;
   AuthService: IAuthService;
   UserService: IUserService;
   MockAssistantService: MockAssistantService;
@@ -102,6 +104,10 @@ export class ServiceScope implements IServiceProvider {
       throw new Error(`${identifier} service is not registered.`);
     }
 
+    if (descriptor.singleton && descriptor.instance == null) {
+      descriptor.instance = descriptor.factory(this);
+    }
+
     const instance =
       descriptor.singleton && descriptor.instance != null
         ? descriptor.instance
@@ -133,6 +139,10 @@ export class ServiceContainer implements IServiceProvider {
       throw new Error(`${identifier} service is not registered.`);
     }
 
+    if (descriptor.singleton && descriptor.instance == null) {
+      descriptor.instance = descriptor.factory(this);
+    }
+
     const instance =
       descriptor.singleton && descriptor.instance != null
         ? descriptor.instance
@@ -148,6 +158,12 @@ export class ServiceContainer implements IServiceProvider {
 
 export function registerServices(services: ServiceContainer, pool: Pool) {
   services.register({
+    identifier: "Logger",
+    factory: () => new Logger(),
+    singleton: true,
+  });
+
+  services.register({
     identifier: "DataContext",
     factory: () => new DataContext(pool),
   });
@@ -156,11 +172,6 @@ export function registerServices(services: ServiceContainer, pool: Pool) {
     identifier: "FileStorage",
     factory: () => new FileStorage(),
     singleton: true,
-  });
-
-  services.register({
-    identifier: "Logger",
-    factory: () => new Logger(),
   });
 
   services.register({
@@ -212,13 +223,21 @@ export function registerServices(services: ServiceContainer, pool: Pool) {
   });
 
   services.register({
+    identifier: "EmailService",
+    factory: () => new EmailService(),
+    singleton: true,
+  });
+
+  services.register({
     identifier: "AuthService",
     factory: (services) =>
       new AuthService(
         services.get("DataContext"),
         services.get("UserRepository"),
         services.get("SessionRepository"),
-        services.get("RefreshTokenRepository")
+        services.get("RefreshTokenRepository"),
+        services.get("EmailService"),
+        services.get("Logger")
       ),
   });
 
@@ -258,7 +277,8 @@ export function registerServices(services: ServiceContainer, pool: Pool) {
       new ProjectService(
         services.get("DataContext"),
         services.get("FileStorage"),
-        services.get("ProjectRepository")
+        services.get("ProjectRepository"),
+        services.get("AssistantService")
       ),
   });
 
@@ -293,6 +313,7 @@ export function registerServices(services: ServiceContainer, pool: Pool) {
       new TestService(
         services.get("DataContext"),
         services.get("FileStorage"),
+        services.get("UserRepository"),
         services.get("ChatRepository"),
         services.get("MessageRepository"),
         services.get("DocumentRepository")

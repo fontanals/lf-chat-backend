@@ -29,6 +29,7 @@ import { AssistantService } from "../../../src/services/assistant";
 import { MockAssistantService } from "../../../src/services/assistant-mock";
 import { AuthContext } from "../../../src/services/auth";
 import { ChatService } from "../../../src/services/chat";
+import { Logger } from "../../../src/services/logger";
 import {
   createTestPool,
   insertChats,
@@ -53,13 +54,15 @@ describe("ChatService", () => {
   const openAiModelUsageRepository = new OpenAiModelUsageRepository(
     dataContext
   );
+  const logger = new Logger();
   const assistantService = new AssistantService(
     fileStorage,
     documentRepository,
     documentChunkRepository,
     openAiModelUsageRepository,
     new MockAssistantService(),
-    aiService
+    aiService,
+    logger
   );
   const chatService = new ChatService(
     dataContext,
@@ -79,6 +82,9 @@ describe("ChatService", () => {
     password: "password",
     displayName: "User 1",
     customPrompt: null,
+    verificationToken: null,
+    recoveryToken: null,
+    isVerified: true,
     createdAt: new Date(),
     updatedAt: new Date(),
   };
@@ -93,7 +99,7 @@ describe("ChatService", () => {
     user: { id: mockUser.id, name: mockUser.name, email: mockUser.email },
   };
 
-  const project: Project = {
+  const mockProject: Project = {
     id: randomUUID(),
     title: "Project 1",
     description: "Project 1 Description",
@@ -105,7 +111,7 @@ describe("ChatService", () => {
   const mockChats: Chat[] = Array.from({ length: 15 }, (_, index) => ({
     id: randomUUID(),
     title: `Chat ${index + 1}`,
-    projectId: index === 0 ? project.id : null,
+    projectId: index === 0 ? mockProject.id : null,
     userId: mockUser.id,
     createdAt: addDays(new Date(), -index),
     updatedAt: addDays(new Date(), -index),
@@ -308,7 +314,7 @@ describe("ChatService", () => {
     );
 
     await insertUsers([mockUser], pool);
-    await insertProjects([project], pool);
+    await insertProjects([mockProject], pool);
   });
 
   beforeEach(async () => {
@@ -375,7 +381,7 @@ describe("ChatService", () => {
         authContext
       );
 
-      expect(response).toEqual({ ...mockChat, project });
+      expect(response).toEqual({ ...mockChat, project: mockProject });
     });
   });
 
@@ -755,6 +761,18 @@ describe("ChatService", () => {
       );
 
       expect(response).toEqual(mockChat.id);
+    });
+  });
+
+  describe("deleteAllChats", () => {
+    it("should delete all user chats and return true", async () => {
+      const response = await chatService.deleteAllChats(authContext);
+
+      const databaseChats = await chatRepository.findAll();
+
+      expect(databaseChats).toEqual([]);
+
+      expect(response).toBe(true);
     });
   });
 });

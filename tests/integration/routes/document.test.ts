@@ -7,8 +7,10 @@ import { config } from "../../../src/config";
 import { Document } from "../../../src/models/entities/document";
 import { User } from "../../../src/models/entities/user";
 import { UploadDocumentRequest } from "../../../src/models/requests/document";
-import { ApplicationErrorCode } from "../../../src/utils/errors";
-import { HttpStatusCode } from "../../../src/utils/types";
+import {
+  ApplicationErrorCode,
+  HttpStatusCode,
+} from "../../../src/utils/errors";
 import {
   createTestPool,
   insertDocuments,
@@ -29,6 +31,9 @@ describe("Document Routes", () => {
     password: "password",
     displayName: `User ${index + 1}`,
     customPrompt: null,
+    verificationToken: null,
+    recoveryToken: null,
+    isVerified: true,
     createdAt: new Date(),
     updatedAt: new Date(),
   }));
