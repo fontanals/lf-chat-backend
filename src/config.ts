@@ -54,18 +54,6 @@ export const config = z
         message:
           "OPENAI_MONTHLY_USAGE_LIMIT_IN_DOLLARS must be a valid integer",
       }),
-    CHUNK_SIZE: z
-      .string()
-      .transform((value) => parseInt(value))
-      .refine((value) => !isNaN(value), {
-        message: "CHUNK_SIZE must be a valid integer",
-      }),
-    CHUNK_OVERLAP: z
-      .string()
-      .transform((value) => parseInt(value))
-      .refine((value) => !isNaN(value), {
-        message: "CHUNK_OVERLAP must be a valid integer",
-      }),
     ENABLE_RATE_LIMITING: z
       .enum(["true", "false"])
       .optional()

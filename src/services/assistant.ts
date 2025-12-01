@@ -465,9 +465,9 @@ The user has uploaded ${
 ${options.documents
   .map(
     (document) =>
-      `- ID: ${document.id} - NAME: ${document.name} - MIMETYPE: ${
-        document.mimetype
-      } - ${
+      `- ID: ${document.id} - NAME: ${document.name} - SIZE: ${(
+        document.sizeInBytes / 1024
+      ).toFixed(2)} KB - MIMETYPE: ${document.mimetype} - ${
         document.isProcessed ? "PROCESSED" : "NOT PROCESSED (NEEDS PROCESSING)"
       }`
   )
@@ -527,11 +527,20 @@ You have access to these tools:
 - Only use this on documents marked as "NOT PROCESSED"
 - After processing, the document becomes searchable
 
-**readDocument**: Finds specific information within a processed document using semantic search
+**readDocument**: Reads document content with two modes
 - Input: { documentId: string, query: string }
-- Only works on documents marked as "PROCESSED ✓"
-- Use targeted, specific queries for best results
-- May need multiple searches with different queries to find all relevant information
+- Only works on documents marked as "PROCESSED"
+- **Important**: Document chunks are ALWAYS returned sorted by their index (sequential order in the original document)
+- **Two reading modes**:
+  1. **Sequential reading** (query = ""): Returns the first 10 chunks in order. Use this for:
+     - Small documents (< 60 KB) where you want to read the entire content
+     - Getting an overview of document structure
+     - When you need to read from the beginning
+  2. **Semantic search** (query = "search terms"): Finds the 10 most relevant chunks by semantic similarity, then returns them sorted by index. Use this for:
+     - Large documents (≥ 60 KB) where you need specific information
+     - Targeted queries about particular topics
+     - When you know what you're looking for
+     - May need multiple searches with different queries to find all relevant information
 
 Use these tools proactively when users ask about uploaded documents.
 
@@ -651,7 +660,7 @@ Use these tools proactively when users ask about uploaded documents.
       readDocument: tool({
         name: "readDocument",
         description:
-          "Searches the provided document for relevant information based on a string query. Returns document chunks in XML format.",
+          "Reads a document and returns content chunks. Pass a specific query to search semantically, or pass an empty string to read the first 10 chunks sequentially (useful for small documents). Returns document chunks in XML format.",
         inputSchema: z.object({
           id: z.string(),
           name: z.string(),
@@ -771,17 +780,21 @@ Use these tools proactively when users ask about uploaded documents.
 
         documentChunks = await this.documentChunkRepository.findRelevant(
           embeddingResult.embedding,
-          5,
+          10,
           { documentId: input.id }
         );
       } else {
         documentChunks = await this.documentChunkRepository.findAll({
           documentId: input.id,
-          limit: 5,
+          limit: 10,
         });
       }
 
       const data = documentChunks
+        .sort(
+          (documentChunkA, documentChunkB) =>
+            documentChunkA.index - documentChunkB.index
+        )
         .map(
           (documentChunk) =>
             `<document-chunk>${documentChunk.content}</document-chunk>`
@@ -823,6 +836,9 @@ Use these tools proactively when users ask about uploaded documents.
     documentId: string,
     content: string
   ): Promise<DocumentChunk[]> {
+    const chunkSize = 1000;
+    const chunkOverlap = 100;
+
     const words = content.split(/\s+/).filter(Boolean);
 
     const documentChunks: DocumentChunk[] = [];
@@ -830,7 +846,7 @@ Use these tools proactively when users ask about uploaded documents.
     let index = 0;
 
     while (index < words.length) {
-      const end = index + config.CHUNK_SIZE;
+      const end = index + chunkSize;
 
       const documentChunk: DocumentChunk = {
         id: randomUUID(),
@@ -842,7 +858,7 @@ Use these tools proactively when users ask about uploaded documents.
 
       documentChunks.push(documentChunk);
 
-      index += config.CHUNK_SIZE - config.CHUNK_OVERLAP;
+      index += chunkSize - chunkOverlap;
     }
 
     return documentChunks;

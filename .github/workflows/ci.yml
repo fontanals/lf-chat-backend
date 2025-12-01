@@ -53,8 +53,6 @@ jobs:
           OPENAI_MAIN_MODEL=gpt-4o-mini
           OPENAI_LOW_MODEL=gpt-4o-mini
           OPENAI_MONTHLY_USAGE_LIMIT_IN_DOLLARS=15
-          CHUNK_SIZE=500
-          CHUNK_OVERLAP=50
           ENABLE_RATE_LIMITING=false
           RATE_LIMIT_WINDOW_IN_MINUTES=15
           RATE_LIMIT_MAX_REQUESTS=100

@@ -1,12 +1,12 @@
 import multer, { memoryStorage } from "multer";
 
-const FIVE_MB = 5 * 1024 * 1024;
+const ONE_MB = 1 * 1024 * 1024;
 
 const storage = memoryStorage();
 
 export const upload = multer({
   storage,
-  limits: { fileSize: FIVE_MB },
+  limits: { fileSize: ONE_MB },
   fileFilter: (req, file, callback) => {
     const allowedExtensions = [".txt", ".pdf"];
     const allowedMimetypes = ["text/plain", "application/pdf"];

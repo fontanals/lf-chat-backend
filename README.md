@@ -69,8 +69,6 @@ REST API for an AI chat application similar to ChatGPT and Claude.ai. Users can 
 | `OPENAI_MAIN_MODEL`                     | Primary OpenAI model (`gpt-5-nano` or `gpt-4o-mini`)                                |
 | `OPENAI_LOW_MODEL`                      | Secondary model for lighter tasks (`gpt-5-nano` or `gpt-4o-mini`)                   |
 | `OPENAI_MONTHLY_USAGE_LIMIT_IN_DOLLARS` | Monthly spending limit for OpenAI                                                   |
-| `CHUNK_SIZE`                            | Document chunk size in characters                                                   |
-| `CHUNK_OVERLAP`                         | Overlap between chunks                                                              |
 | `ENABLE_RATE_LIMITING`                  | Enable rate limiting                                                                |
 | `RATE_LIMIT_WINDOW_IN_MINUTES`          | Rate limit window                                                                   |
 | `RATE_LIMIT_MAX_REQUESTS`               | Max requests per window                                                             |
