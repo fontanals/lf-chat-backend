@@ -35,6 +35,7 @@ REST API for an AI chat application similar to ChatGPT and Claude.ai. Users can 
 - [Docker](https://www.docker.com/) and Docker Compose
 - [OpenAI API](https://platform.openai.com/) key
 - [AWS S3](https://aws.amazon.com/s3/) bucket for file storage
+- SMTP service for sending emails (account verification and password recovery)
 
 ## Environment Variables
 
