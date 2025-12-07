@@ -89,24 +89,6 @@ describe("DocumentRepository", () => {
     });
   });
 
-  describe("findAny", () => {
-    it("should return an empty array when no documents are found", async () => {
-      dataContext.query.mockResolvedValue({ rows: [] });
-
-      const documents = await documentRepository.findAny();
-
-      expect(documents).toEqual([]);
-    });
-
-    it("should return documents", async () => {
-      dataContext.query.mockResolvedValue({ rows: mockDocuments });
-
-      const documents = await documentRepository.findAny();
-
-      expect(documents).toEqual(mockDocuments);
-    });
-  });
-
   describe("findOne", () => {
     it("should return null when no document is found", async () => {
       dataContext.query.mockResolvedValue({ rows: [] });
@@ -124,6 +106,30 @@ describe("DocumentRepository", () => {
       const document = await documentRepository.findOne();
 
       expect(document).toEqual(mockDocument);
+    });
+  });
+
+  describe("getChatContextDocuments", () => {
+    it("should return an empty array when no documents are found", async () => {
+      dataContext.query.mockResolvedValue({ rows: [] });
+
+      const documents = await documentRepository.getChatContextDocuments(
+        { ids: [], chatId: randomUUID() },
+        randomUUID()
+      );
+
+      expect(documents).toEqual([]);
+    });
+
+    it("should return documents", async () => {
+      dataContext.query.mockResolvedValue({ rows: mockDocuments });
+
+      const documents = await documentRepository.getChatContextDocuments(
+        { ids: [], chatId: randomUUID() },
+        randomUUID()
+      );
+
+      expect(documents).toEqual(mockDocuments);
     });
   });
 

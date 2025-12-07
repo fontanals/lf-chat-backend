@@ -10,11 +10,14 @@ export interface IDocumentRepository {
   count(filters?: DocumentFilters): Promise<number>;
   exists(filters?: DocumentFilters): Promise<boolean>;
   findAll(filters?: DocumentFilters): Promise<Document[]>;
-  findAny(filters?: DocumentFilters): Promise<Document[]>;
   findOne(filters?: DocumentFilters): Promise<Document | null>;
   create(document: Document): Promise<void>;
   update(id: string, document: NullablePartial<Document>): Promise<void>;
   delete(id: string): Promise<void>;
+  getChatContextDocuments(
+    filters: { ids: string[]; chatId: string; projectId?: string | null },
+    userId: string
+  ): Promise<Document[]>;
   getAllUserChatDocuments(userId: string): Promise<Document[]>;
 }
 
@@ -129,45 +132,6 @@ export class DocumentRepository implements IDocumentRepository {
     return result.rows;
   }
 
-  async findAny(filters?: DocumentFilters): Promise<Document[]> {
-    let paramsCount = 0;
-
-    const result = await this.dataContext.query<Document>(
-      `SELECT
-        id,
-        key,
-        name,
-        mimetype,
-        size_in_bytes AS "sizeInBytes",
-        is_processed AS "isProcessed",
-        chat_id AS "chatId",
-        project_id AS "projectId",
-        user_id AS "userId",
-        created_at AS "createdAt",
-        updated_at AS "updatedAt"
-      FROM "document"
-      WHERE
-        ${filters?.id != null ? `id = $${++paramsCount} OR` : ""}
-        ${filters?.key != null ? `key = $${++paramsCount} OR` : ""}
-        ${filters?.chatId != null ? `chat_id = $${++paramsCount} OR` : ""}
-        ${filters?.projectId != null ? `project_id = $${++paramsCount} OR` : ""}
-        ${filters?.userId != null ? `user_id = $${++paramsCount} OR` : ""}
-        ${filters?.ids != null ? `id = ANY($${++paramsCount}) OR` : ""}
-        FALSE
-      ORDER BY created_at;`,
-      [
-        filters?.id,
-        filters?.key,
-        filters?.chatId,
-        filters?.projectId,
-        filters?.userId,
-        filters?.ids,
-      ].filter((param) => param != null)
-    );
-
-    return result.rows;
-  }
-
   async findOne(filters?: DocumentFilters): Promise<Document | null> {
     let paramsCount = 0;
 
@@ -267,6 +231,45 @@ export class DocumentRepository implements IDocumentRepository {
         id = $1;`,
       [id]
     );
+  }
+
+  async getChatContextDocuments(
+    filters: { ids: string[]; chatId: string; projectId?: string | null },
+    userId: string
+  ): Promise<Document[]> {
+    let paramsCount = 0;
+
+    const result = await this.dataContext.query<Document>(
+      `SELECT
+        id,
+        key,
+        name,
+        mimetype,
+        size_in_bytes AS "sizeInBytes",
+        is_processed AS "isProcessed",
+        chat_id AS "chatId",
+        project_id AS "projectId",
+        user_id AS "userId",
+        created_at AS "createdAt",
+        updated_at AS "updatedAt"
+      FROM "document"
+      WHERE
+        (
+          id = ANY($${++paramsCount}) OR
+          chat_id = $${++paramsCount} OR
+          ${
+            filters.projectId != null ? `project_id = $${++paramsCount} OR` : ""
+          }
+          FALSE
+        ) AND
+        user_id = $${++paramsCount}
+      ORDER BY created_at;`,
+      [filters.ids, filters.chatId, filters.projectId, userId].filter(
+        (param) => param != null
+      )
+    );
+
+    return result.rows;
   }
 
   async getAllUserChatDocuments(userId: string): Promise<Document[]> {

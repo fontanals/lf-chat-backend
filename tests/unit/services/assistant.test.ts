@@ -9,6 +9,7 @@ import {
   UserMessage,
 } from "../../../src/models/entities/message";
 import { OpenAiModelUsage } from "../../../src/models/entities/open-ai-model-usage";
+import { User } from "../../../src/models/entities/user";
 import { IDocumentRepository } from "../../../src/repositories/document";
 import { IDocumentChunkRepository } from "../../../src/repositories/document-chunk";
 import { IOpenAiModelUsageRepository } from "../../../src/repositories/open-ai-model-usage";
@@ -17,6 +18,7 @@ import {
   AssistantService,
   IAssistantService,
 } from "../../../src/services/assistant";
+import { AuthContext } from "../../../src/services/auth";
 import { ILogger } from "../../../src/services/logger";
 import { PromiseUtils } from "../../../src/utils/promises";
 
@@ -29,6 +31,30 @@ describe("AssistantService", () => {
   let aiService: jest.Mocked<AiService>;
   let logger: ILogger;
   let assistantService: AssistantService;
+
+  const mockUser: User = {
+    id: randomUUID(),
+    name: "User 1",
+    email: "user1@example.com",
+    password: "password",
+    displayName: "User 1",
+    customPrompt: null,
+    verificationToken: null,
+    recoveryToken: null,
+    isVerified: true,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
+
+  const authContext: AuthContext = {
+    session: {
+      id: randomUUID(),
+      expiresAt: new Date().toISOString(),
+      userId: mockUser.id,
+      createdAt: new Date().toISOString(),
+    },
+    user: { id: mockUser.id, name: mockUser.name, email: mockUser.email },
+  };
 
   const mockOpenAiModelUsages: OpenAiModelUsage[] = [
     {
@@ -84,11 +110,11 @@ describe("AssistantService", () => {
       count: jest.fn(),
       exists: jest.fn(),
       findAll: jest.fn(),
-      findAny: jest.fn(),
       findOne: jest.fn(),
       create: jest.fn(),
       update: jest.fn(),
       delete: jest.fn(),
+      getChatContextDocuments: jest.fn(),
       getAllUserChatDocuments: jest.fn(),
     };
 
@@ -241,11 +267,14 @@ describe("AssistantService", () => {
 
       mockAssistantService.sendMessage.mockResolvedValue(mockAssistantMessage);
 
-      const assistantMessage = await assistantService.sendMessage({
-        previousMessages: [],
-        userMessage: userMessage,
-        onMessagePart: () => {},
-      });
+      const assistantMessage = await assistantService.sendMessage(
+        {
+          previousMessages: [],
+          userMessage: userMessage,
+          onMessagePart: () => {},
+        },
+        authContext
+      );
 
       expect(assistantMessage).toEqual(mockAssistantMessage);
     });
@@ -269,11 +298,14 @@ describe("AssistantService", () => {
         results: [{ flagged: true }],
       } as any);
 
-      const assistantMessage = await assistantService.sendMessage({
-        previousMessages: [],
-        userMessage: userMessage,
-        onMessagePart: () => {},
-      });
+      const assistantMessage = await assistantService.sendMessage(
+        {
+          previousMessages: [],
+          userMessage: userMessage,
+          onMessagePart: () => {},
+        },
+        authContext
+      );
 
       expect(assistantMessage).toEqual({
         id: expect.any(String),
@@ -447,184 +479,189 @@ describe("AssistantService", () => {
       const contentBlocks: AssistantContentBlock[] = [];
       const contentBlocksMap = new Map<string, AssistantContentBlock>();
 
-      const assistantMessage = await assistantService.sendMessage({
-        previousMessages: [],
-        userMessage: userMessage,
-        onMessagePart: (messagePart) => {
-          switch (messagePart.type) {
-            case "message-start": {
-              messageId = messagePart.messageId;
-
-              expect(messagePart).toEqual({
-                type: "message-start",
-                messageId: expect.any(String),
-              });
-
-              break;
-            }
-            case "text-start": {
-              contentBlocksMap.set(messagePart.id, {
-                type: "text",
-                id: messagePart.id,
-                text: "",
-              });
-
-              expect(messagePart).toEqual({
-                type: "text-start",
-                id: expect.any(String),
-                messageId: messageId,
-              });
-
-              break;
-            }
-            case "text-delta": {
-              const contentBlock = contentBlocksMap.get(messagePart.id)!;
-
-              (contentBlock as TextContentBlock).text += messagePart.delta;
-
-              expect(messagePart).toEqual({
-                type: "text-delta",
-                id: contentBlock.id,
-                delta: expect.any(String),
-                messageId: messageId,
-              });
-
-              break;
-            }
-            case "text-end": {
-              const contentBlock = contentBlocksMap.get(messagePart.id)!;
-
-              contentBlocks.push(contentBlock);
-
-              expect(messagePart).toEqual({
-                type: "text-end",
-                id: expect.any(String),
-                messageId: messageId,
-              });
-
-              break;
-            }
-            case "tool-call-start": {
-              contentBlocksMap.set(messagePart.id, {
-                type: "tool-call",
-                id: messagePart.id,
-                name: messagePart.name,
-              } as ToolCallContentBlock);
-
-              expect(messagePart).toEqual({
-                type: "tool-call-start",
-                id: expect.any(String),
-                name: expect.any(String),
-                messageId: messageId,
-              });
-
-              break;
-            }
-            case "tool-call-delta": {
-              expect(messagePart).toEqual({
-                type: "tool-call-delta",
-                id: expect.any(String),
-                name: expect.any(String),
-                delta: expect.any(String),
-                messageId: messageId,
-              });
-
-              break;
-            }
-            case "tool-call": {
-              const contentBlock = contentBlocksMap.get(messagePart.id)!;
-
-              (contentBlock as ToolCallContentBlock).input = messagePart.input;
-
-              if (messagePart.name === "processDocument") {
-                const mockContentBlock =
-                  mockContentBlocks[1] as ToolCallContentBlock;
+      const assistantMessage = await assistantService.sendMessage(
+        {
+          previousMessages: [],
+          userMessage: userMessage,
+          onMessagePart: (messagePart) => {
+            switch (messagePart.type) {
+              case "message-start": {
+                messageId = messagePart.messageId;
 
                 expect(messagePart).toEqual({
+                  type: "message-start",
+                  messageId: expect.any(String),
+                });
+
+                break;
+              }
+              case "text-start": {
+                contentBlocksMap.set(messagePart.id, {
+                  type: "text",
+                  id: messagePart.id,
+                  text: "",
+                });
+
+                expect(messagePart).toEqual({
+                  type: "text-start",
+                  id: expect.any(String),
+                  messageId: messageId,
+                });
+
+                break;
+              }
+              case "text-delta": {
+                const contentBlock = contentBlocksMap.get(messagePart.id)!;
+
+                (contentBlock as TextContentBlock).text += messagePart.delta;
+
+                expect(messagePart).toEqual({
+                  type: "text-delta",
+                  id: contentBlock.id,
+                  delta: expect.any(String),
+                  messageId: messageId,
+                });
+
+                break;
+              }
+              case "text-end": {
+                const contentBlock = contentBlocksMap.get(messagePart.id)!;
+
+                contentBlocks.push(contentBlock);
+
+                expect(messagePart).toEqual({
+                  type: "text-end",
+                  id: expect.any(String),
+                  messageId: messageId,
+                });
+
+                break;
+              }
+              case "tool-call-start": {
+                contentBlocksMap.set(messagePart.id, {
                   type: "tool-call",
-                  id: mockContentBlock.id,
-                  name: "processDocument",
-                  input: mockContentBlock.input,
-                  messageId: messageId,
-                });
-              }
-
-              if (messagePart.name === "readDocument") {
-                const mockContentBlock =
-                  mockContentBlocks[2] as ToolCallContentBlock;
+                  id: messagePart.id,
+                  name: messagePart.name,
+                } as ToolCallContentBlock);
 
                 expect(messagePart).toEqual({
-                  type: "tool-call",
-                  id: mockContentBlock.id,
-                  name: "readDocument",
-                  input: mockContentBlock.input,
+                  type: "tool-call-start",
+                  id: expect.any(String),
+                  name: expect.any(String),
                   messageId: messageId,
                 });
+
+                break;
               }
+              case "tool-call-delta": {
+                expect(messagePart).toEqual({
+                  type: "tool-call-delta",
+                  id: expect.any(String),
+                  name: expect.any(String),
+                  delta: expect.any(String),
+                  messageId: messageId,
+                });
 
-              break;
-            }
-            case "tool-call-result": {
-              const contentBlock = contentBlocksMap.get(messagePart.id)!;
+                break;
+              }
+              case "tool-call": {
+                const contentBlock = contentBlocksMap.get(messagePart.id)!;
 
-              (contentBlock as ToolCallContentBlock).input = messagePart.input;
-              (contentBlock as ToolCallContentBlock).output =
-                messagePart.output;
+                (contentBlock as ToolCallContentBlock).input =
+                  messagePart.input;
 
-              if (messagePart.name === "processDocument") {
-                const mockContentBlock =
-                  mockContentBlocks[1] as ToolCallContentBlock;
+                if (messagePart.name === "processDocument") {
+                  const mockContentBlock =
+                    mockContentBlocks[1] as ToolCallContentBlock;
+
+                  expect(messagePart).toEqual({
+                    type: "tool-call",
+                    id: mockContentBlock.id,
+                    name: "processDocument",
+                    input: mockContentBlock.input,
+                    messageId: messageId,
+                  });
+                }
+
+                if (messagePart.name === "readDocument") {
+                  const mockContentBlock =
+                    mockContentBlocks[2] as ToolCallContentBlock;
+
+                  expect(messagePart).toEqual({
+                    type: "tool-call",
+                    id: mockContentBlock.id,
+                    name: "readDocument",
+                    input: mockContentBlock.input,
+                    messageId: messageId,
+                  });
+                }
+
+                break;
+              }
+              case "tool-call-result": {
+                const contentBlock = contentBlocksMap.get(messagePart.id)!;
+
+                (contentBlock as ToolCallContentBlock).input =
+                  messagePart.input;
+                (contentBlock as ToolCallContentBlock).output =
+                  messagePart.output;
+
+                if (messagePart.name === "processDocument") {
+                  const mockContentBlock =
+                    mockContentBlocks[1] as ToolCallContentBlock;
+
+                  expect(messagePart).toEqual({
+                    type: "tool-call-result",
+                    id: mockContentBlock.id,
+                    name: "processDocument",
+                    input: mockContentBlock.input,
+                    output: mockContentBlock.output,
+                    messageId: messageId,
+                  });
+                }
+
+                if (messagePart.name === "readDocument") {
+                  const mockContentBlock =
+                    mockContentBlocks[2] as ToolCallContentBlock;
+
+                  expect(messagePart).toEqual({
+                    type: "tool-call-result",
+                    id: mockContentBlock.id,
+                    name: "readDocument",
+                    input: mockContentBlock.input,
+                    output: mockContentBlock.output,
+                    messageId: messageId,
+                  });
+                }
+
+                break;
+              }
+              case "tool-call-end": {
+                const contentBlock = contentBlocksMap.get(messagePart.id)!;
+
+                contentBlocks.push(contentBlock);
 
                 expect(messagePart).toEqual({
-                  type: "tool-call-result",
-                  id: mockContentBlock.id,
-                  name: "processDocument",
-                  input: mockContentBlock.input,
-                  output: mockContentBlock.output,
+                  type: "tool-call-end",
+                  id: expect.any(String),
+                  name: expect.any(String),
                   messageId: messageId,
                 });
+
+                break;
               }
-
-              if (messagePart.name === "readDocument") {
-                const mockContentBlock =
-                  mockContentBlocks[2] as ToolCallContentBlock;
-
+              case "message-end": {
                 expect(messagePart).toEqual({
-                  type: "tool-call-result",
-                  id: mockContentBlock.id,
-                  name: "readDocument",
-                  input: mockContentBlock.input,
-                  output: mockContentBlock.output,
+                  type: "message-end",
+                  finishReason: "stop",
                   messageId: messageId,
                 });
               }
-
-              break;
             }
-            case "tool-call-end": {
-              const contentBlock = contentBlocksMap.get(messagePart.id)!;
-
-              contentBlocks.push(contentBlock);
-
-              expect(messagePart).toEqual({
-                type: "tool-call-end",
-                id: expect.any(String),
-                name: expect.any(String),
-                messageId: messageId,
-              });
-
-              break;
-            }
-            case "message-end": {
-              expect(messagePart).toEqual({
-                type: "message-end",
-                finishReason: "stop",
-                messageId: messageId,
-              });
-            }
-          }
+          },
         },
-      });
+        authContext
+      );
 
       expect(contentBlocks).toEqual(mockContentBlocks);
       expect(assistantMessage).toEqual({
