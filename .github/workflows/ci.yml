@@ -28,47 +28,39 @@ jobs:
       - name: Create .env.test file
         run: |
           cat << EOF > .env.test
-          PORT=3001
-          LOGS_PATH=logs
+          PORT="3001"
+          LOGS_PATH="logs"
           CORS_ORIGINS="http://localhost:5173,http://localhost:5174"
-          POSTGRES_HOST=localhost
-          POSTGRES_PORT=5433
-          POSTGRES_USER=postgres
-          POSTGRES_PASSWORD=${{ secrets.POSTGRES_PASSWORD }}
-          POSTGRES_DB=lf_chat
-          ACCOUNT_VERIFICATION_TOKEN_SECRET=${{ secrets.ACCOUNT_VERIFICATION_TOKEN_SECRET }}
-          ACCESS_TOKEN_SECRET=${{ secrets.ACCESS_TOKEN_SECRET }}
-          REFRESH_TOKEN_SECRET=${{ secrets.REFRESH_TOKEN_SECRET }}
-          PASSWORD_RECOVERY_TOKEN_SECRET=${{ secrets.PASSWORD_RECOVERY_TOKEN_SECRET }}
-          SMTP_HOST=${{ secrets.SMTP_HOST }}
-          SMTP_PORT=${{ secrets.SMTP_PORT }}
-          SMTP_USER=${{ secrets.SMTP_USER }}
-          SMTP_PASSWORD=${{ secrets.SMTP_PASSWORD }}
-          SUPPORT_EMAIL=${{ secrets.SUPPORT_EMAIL }}
-          AWS_REGION=${{ secrets.AWS_REGION }}
-          AWS_S3_BUCKET_NAME=${{ secrets.AWS_S3_BUCKET_NAME }}
-          AWS_ACCESS_KEY_ID=${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY=${{ secrets.AWS_SECRET_ACCESS_KEY }}
-          OPENAI_API_KEY=${{ secrets.OPENAI_API_KEY }}
-          OPENAI_MAIN_MODEL=gpt-4o-mini
-          OPENAI_LOW_MODEL=gpt-4o-mini
-          OPENAI_MONTHLY_USAGE_LIMIT_IN_DOLLARS=15
-          ENABLE_RATE_LIMITING=false
-          RATE_LIMIT_WINDOW_IN_MINUTES=15
-          RATE_LIMIT_MAX_REQUESTS=100
-          MAX_DOCUMENTS_PER_USER=10
+          POSTGRES_HOST="localhost"
+          POSTGRES_PORT="5433"
+          POSTGRES_USER="postgres"
+          POSTGRES_PASSWORD="${{ secrets.POSTGRES_PASSWORD }}"
+          POSTGRES_DB="lf_chat"
+          ACCOUNT_VERIFICATION_TOKEN_SECRET="${{ secrets.ACCOUNT_VERIFICATION_TOKEN_SECRET }}"
+          ACCESS_TOKEN_SECRET="${{ secrets.ACCESS_TOKEN_SECRET }}"
+          REFRESH_TOKEN_SECRET="${{ secrets.REFRESH_TOKEN_SECRET }}"
+          PASSWORD_RECOVERY_TOKEN_SECRET="${{ secrets.PASSWORD_RECOVERY_TOKEN_SECRET }}"
+          SMTP_HOST="${{ secrets.SMTP_HOST }}"
+          SMTP_PORT="${{ secrets.SMTP_PORT }}"
+          SMTP_USER="${{ secrets.SMTP_USER }}"
+          SMTP_PASSWORD="${{ secrets.SMTP_PASSWORD }}"
+          SUPPORT_EMAIL="${{ secrets.SUPPORT_EMAIL }}"
+          AWS_REGION="${{ secrets.AWS_REGION }}"
+          AWS_S3_BUCKET_NAME="${{ secrets.AWS_S3_BUCKET_NAME }}"
+          AWS_ACCESS_KEY_ID="${{ secrets.AWS_ACCESS_KEY_ID }}"
+          AWS_SECRET_ACCESS_KEY="${{ secrets.AWS_SECRET_ACCESS_KEY }}"
+          OPENAI_API_KEY="${{ secrets.OPENAI_API_KEY }}"
+          OPENAI_MAIN_MODEL="gpt-4o-mini"
+          OPENAI_LOW_MODEL="gpt-4o-mini"
+          OPENAI_MONTHLY_USAGE_LIMIT_IN_DOLLARS="15"
+          ENABLE_RATE_LIMITING="false"
+          RATE_LIMIT_WINDOW_IN_MINUTES="15"
+          RATE_LIMIT_MAX_REQUESTS="100"
+          MAX_DOCUMENTS_PER_USER="25"
           EOF
 
       - name: Start test environment
-        run: docker compose --env-file .env.test -f docker-compose.test.yml up -d postgres
-
-      - name: Wait for postgres to be healthy
-        run: |
-          timeout 60 bash -c 'until docker compose --env-file .env.test -f docker-compose.test.yml ps postgres | grep -q "healthy"; do
-            echo "Waiting for postgres to be healthy..."
-            sleep 2
-          done'
-          echo "Postgres is healthy!"
+        run: docker compose --env-file .env.test -f docker-compose.test.yml up -d --wait postgres
 
       - name: Run tests
         run: npm test

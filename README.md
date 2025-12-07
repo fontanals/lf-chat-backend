@@ -14,6 +14,7 @@ REST API for an AI chat application similar to ChatGPT and Claude.ai. Users can 
 - **Logging**: File logger with daily rotation using Winston
 - **Docker Multi-Environment Setup**: Dedicated environment setups using Docker Compose
 - **Automated Tests**: Unit and integration tests using Jest
+- **CI/CD**: CI/CD with github actions
 
 ## Technologies
 
@@ -28,7 +29,7 @@ REST API for an AI chat application similar to ChatGPT and Claude.ai. Users can 
 - Jest
 - Docker
 - Docker Compose
-- CI with Github Actions
+- CI/CD with Github Actions
 
 ## Prerequisites
 
@@ -39,7 +40,7 @@ REST API for an AI chat application similar to ChatGPT and Claude.ai. Users can 
 
 ## Environment Variables
 
-1. Copy ".env.example" to ".env" for development, ".env.test" for test, and ".env.prod" for production
+1. Copy ".env.example" to ".env" for development and ".env.test" for test
 2. Replace the placeholder values with your own
 
 | Variable                                | Description                                                                         |
@@ -87,9 +88,6 @@ docker compose up
 
 # Test
 docker compose --env-file .env.test -f docker-compose.test.yml up
-
-# Production
-docker compose --env-file .env.prod -f docker-compose.prod.yml up
 ```
 
 5. Open `http://localhost:${PORT}/api/docs` in your browser to view OpenAPI documentation
