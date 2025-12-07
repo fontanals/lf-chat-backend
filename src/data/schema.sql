@@ -146,3 +146,8 @@ VALUES
 ('gpt-5-nano', 0, 0, 0),
 ('gpt-4o-mini', 0, 0, 0),
 ('text-embedding-3-small', 0, 0, 0);
+
+INSERT INTO "user"
+(id, name, email, password, display_name, is_verified)
+VALUES
+(gen_random_uuid(), 'Demo User', 'demo@lfchat.lucasfontana.dev', '$2b$10$0rTSJPFlW7t5SCd/WTShbeudMmhddhs450jo.xEU/dJgpvh1wJFlu', 'Demo', true);

@@ -7,13 +7,7 @@ import { DataContext } from "../../../src/data/data-context";
 import { RefreshToken } from "../../../src/models/entities/refresh-token";
 import { Session } from "../../../src/models/entities/session";
 import { User } from "../../../src/models/entities/user";
-import {
-  RecoverPasswordRequest,
-  ResetPasswordRequest,
-  SigninRequest,
-  SignupRequest,
-  VerifyAccountRequest,
-} from "../../../src/models/requests/auth";
+import { SigninRequest } from "../../../src/models/requests/auth";
 import { RefreshTokenRepository } from "../../../src/repositories/refresh-token";
 import { SessionRepository } from "../../../src/repositories/session";
 import { UserRepository } from "../../../src/repositories/user";
@@ -135,88 +129,6 @@ describe("AuthService", () => {
   afterAll(async () => {
     await pool.end();
     emailService.close();
-  });
-
-  describe("signup", () => {
-    it("should create unverified user with account verification token, send account verification email and return user email", async () => {
-      const request: SignupRequest = {
-        name: "New User",
-        email: "new.user@example.com",
-        password: "password",
-      };
-
-      const response = await authService.signup(request);
-
-      const databaseUser = await userRepository.findOne({
-        email: request.email,
-      });
-
-      if (databaseUser == null) {
-        fail("Expected user to be created.");
-      }
-
-      expect(databaseUser).toEqual({
-        id: expect.any(String),
-        name: request.name,
-        email: request.email,
-        password: expect.any(String),
-        displayName: request.name.split(" ")[0],
-        customPrompt: null,
-        verificationToken: expect.any(String),
-        recoveryToken: null,
-        isVerified: false,
-        createdAt: expect.any(Date),
-        updatedAt: expect.any(Date),
-      });
-
-      const isPasswordCorrect = await bcrypt.compare(
-        "password",
-        databaseUser.password
-      );
-
-      expect(isPasswordCorrect).toBe(true);
-
-      expect(
-        jsonwebtoken.verify(
-          databaseUser.verificationToken!,
-          config.ACCOUNT_VERIFICATION_TOKEN_SECRET
-        )
-      ).toEqual(expect.objectContaining({ email: request.email }));
-
-      expect(response).toBe(request.email);
-    });
-  });
-
-  describe("verifyAccount", () => {
-    it("should verify account and return user email", async () => {
-      const mockUser = mockUsers[4];
-
-      const request: VerifyAccountRequest = {
-        token: mockUser.verificationToken!,
-      };
-
-      const response = await authService.verifyAccount(request);
-
-      const databaseUsers = await userRepository.findAll();
-
-      expect(databaseUsers).toEqual(
-        expect.arrayContaining(
-          mockUsers.map((user) =>
-            user.id === mockUser.id
-              ? {
-                  ...user,
-                  password: expect.any(String),
-                  verificationToken: null,
-                  isVerified: true,
-                  updatedAt: expect.any(Date),
-                }
-              : { ...user, password: expect.any(String) }
-          )
-        )
-      );
-
-      expect(response).toBe(mockUser.email);
-    });
   });
 
   describe("signin", () => {
@@ -354,82 +266,6 @@ describe("AuthService", () => {
       );
 
       expect(response).toEqual(mockUser.id);
-    });
-  });
-
-  describe("recoverPassword", () => {
-    it("should set password recovery token, send password recovery email and return user email", async () => {
-      const mockUser = mockUsers[0];
-
-      const request: RecoverPasswordRequest = { email: mockUser.email };
-
-      const response = await authService.recoverPassword(request);
-
-      const databaseUsers = await userRepository.findAll();
-
-      expect(databaseUsers).toEqual(
-        expect.arrayContaining(
-          mockUsers.map((user) =>
-            user.id === mockUser.id
-              ? {
-                  ...user,
-                  password: expect.any(String),
-                  recoveryToken: expect.any(String),
-                  updatedAt: expect.any(Date),
-                }
-              : { ...user, password: expect.any(String) }
-          )
-        )
-      );
-
-      expect(response).toBe(mockUser.email);
-    });
-  });
-
-  describe("resetPassword", () => {
-    it("should reset password and return user email", async () => {
-      const mockUser = mockUsers[5];
-
-      const request: ResetPasswordRequest = {
-        token: mockUser.recoveryToken!,
-        newPassword: "new-password",
-      };
-
-      const response = await authService.resetPassword(request);
-
-      const databaseUsers = await userRepository.findAll();
-
-      const databaseUser = databaseUsers.find(
-        (user) => user.id === mockUser.id
-      );
-
-      if (databaseUser == null) {
-        fail("Expected user to be found");
-      }
-
-      const isPasswordCorrect = await bcrypt.compare(
-        request.newPassword,
-        databaseUser.password
-      );
-
-      expect(isPasswordCorrect).toBe(true);
-
-      expect(databaseUsers).toEqual(
-        expect.arrayContaining(
-          mockUsers.map((user) =>
-            user.id === mockUser.id
-              ? {
-                  ...user,
-                  password: expect.any(String),
-                  recoveryToken: null,
-                  updatedAt: expect.any(Date),
-                }
-              : { ...user, password: expect.any(String) }
-          )
-        )
-      );
-
-      expect(response).toBe(mockUser.email);
     });
   });
 

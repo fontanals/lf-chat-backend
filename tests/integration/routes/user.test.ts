@@ -97,27 +97,7 @@ describe("User Routes", () => {
   });
 
   describe("updateUser", () => {
-    it("should return an unauthorized response when no access or refresh token is provided", async () => {
-      const updateUserRequest: UpdateUserRequest = {
-        displayName: "Updated Display Name",
-        customPrompt: "Updated Custom Prompt",
-      };
-
-      const response = await request(expressApp)
-        .patch("/api/user")
-        .send(updateUserRequest);
-
-      expect(response.status).toBe(HttpStatusCode.Unauthorized);
-
-      expect(response.body).toEqual({
-        success: false,
-        error: expect.objectContaining({
-          code: ApplicationErrorCode.Unauthorized,
-        }),
-      });
-    });
-
-    it("should return a success response with the user id", async () => {
+    it("should return a resource gone response", async () => {
       const updateUserRequest: UpdateUserRequest = {
         displayName: "Updated Display Name",
         customPrompt: "Updated Custom Prompt",
@@ -128,34 +108,31 @@ describe("User Routes", () => {
         .send(updateUserRequest)
         .set("Authorization", `Bearer ${accessToken}`);
 
-      expect(response.status).toBe(HttpStatusCode.Ok);
-
-      expect(response.body).toEqual({ success: true, data: mockUser.id });
-    });
-  });
-
-  describe("deleteUser", () => {
-    it("should return an unauthorized response when no access or refresh token is provided", async () => {
-      const response = await request(expressApp).delete("/api/user");
-
-      expect(response.status).toBe(HttpStatusCode.Unauthorized);
+      expect(response.status).toBe(HttpStatusCode.Gone);
 
       expect(response.body).toEqual({
         success: false,
         error: expect.objectContaining({
-          code: ApplicationErrorCode.Unauthorized,
+          code: ApplicationErrorCode.Gone,
         }),
       });
     });
+  });
 
-    it("should return a success response with the user id", async () => {
+  describe("deleteUser", () => {
+    it("should return a resource gone response", async () => {
       const response = await request(expressApp)
         .delete("/api/user")
         .set("Authorization", `Bearer ${accessToken}`);
 
-      expect(response.status).toBe(HttpStatusCode.Ok);
+      expect(response.status).toBe(HttpStatusCode.Gone);
 
-      expect(response.body).toEqual({ success: true, data: mockUser.id });
+      expect(response.body).toEqual({
+        success: false,
+        error: expect.objectContaining({
+          code: ApplicationErrorCode.Gone,
+        }),
+      });
     });
   });
 });

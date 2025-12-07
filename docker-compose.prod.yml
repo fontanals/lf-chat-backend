@@ -1,21 +1,19 @@
-name: lf_chat_backend_dev
+name: lf_chat_backend_prod
+
 services:
   api:
-    container_name: lf_chat_api
+    container_name: lf_chat_api_prod
     build:
       context: .
-      target: development
+      target: production
     ports:
       - ${PORT:-3000}:${PORT:-3000}
-    command: npm run dev
     env_file:
       - .env
     environment:
       - POSTGRES_HOST=postgres
       - POSTGRES_PORT=5432
-    volumes:
-      - .:/app
-      - /app/node_modules
+    restart: unless-stopped
     healthcheck:
       test:
         ["CMD-SHELL", "curl -f http://localhost:${PORT:-3000}/api || exit 1"]
@@ -25,22 +23,32 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+    networks:
+      - lf_chat_network
 
   postgres:
-    container_name: lf_chat_postgres
+    container_name: lf_chat_postgres_prod
     image: pgvector/pgvector:pg18-trixie
     ports:
       - ${POSTGRES_PORT:-5432}:5432
     env_file:
       - .env
     volumes:
-      - postgres_data:/var/lib/postgresql
+      - postgres_data_prod:/var/lib/postgresql
       - ./src/data/schema.sql:/docker-entrypoint-initdb.d/schema.sql
+    restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
       interval: 10s
       timeout: 5s
       retries: 5
+    networks:
+      - lf_chat_network
 
 volumes:
-  postgres_data:
+  postgres_data_prod:
+
+networks:
+  lf_chat_network:
+    name: lf_chat_network
+    driver: bridge

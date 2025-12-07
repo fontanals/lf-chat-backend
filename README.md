@@ -2,6 +2,21 @@
 
 REST API for an AI chat application similar to ChatGPT and Claude.ai. Users can have conversations with an AI assistant, create projects and upload documents for context-aware responses using RAG (Retrieval-Augmented Generation).
 
+## DEMO BRANCH
+
+This branch is configured for a **live public demo** with a shared demo account.
+
+The following endpoints are **disabled** for security and demo purposes:
+
+- **POST /api/signup** - Signup is disabled
+- **POST /api/verify-account** - Account verification is disabled
+- **POST /api/recover-password** - Password recovery is disabled
+- **POST /api/reset-password** - Password reset is disabled
+- **PUT /api/user** - Update user is disabled
+- **DELETE /api/user** - Delete user is disabled
+
+Live demo: https://lfchat.lucasfontana.dev
+
 ## Features
 
 - **OpenAI Integration**: Real-time streaming conversations with OpenAI models through Server-Sent Events (SSE)
@@ -28,7 +43,7 @@ REST API for an AI chat application similar to ChatGPT and Claude.ai. Users can 
 - Jest
 - Docker
 - Docker Compose
-- CI with Github Actions
+- CI/CD with Github Actions
 
 ## Prerequisites
 
@@ -39,7 +54,7 @@ REST API for an AI chat application similar to ChatGPT and Claude.ai. Users can 
 
 ## Environment Variables
 
-1. Copy ".env.example" to ".env" for development, ".env.test" for test, and ".env.prod" for production
+1. Copy ".env.example" to ".env" for development, and ".env.test" for test
 2. Replace the placeholder values with your own
 
 | Variable                                | Description                                                                         |
@@ -87,9 +102,6 @@ docker compose up
 
 # Test
 docker compose --env-file .env.test -f docker-compose.test.yml up
-
-# Production
-docker compose --env-file .env.prod -f docker-compose.prod.yml up
 ```
 
 5. Open `http://localhost:${PORT}/api/docs` in your browser to view OpenAPI documentation

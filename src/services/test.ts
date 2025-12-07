@@ -336,6 +336,14 @@ export class TestService implements ITestService {
     try {
       await this.dataContext.begin();
 
+      const documents = await this.documentRepository.findAll();
+
+      if (!ArrayUtils.isNullOrEmpty(documents)) {
+        await this.fileStorage.deleteFiles(
+          documents.map((document) => document.key)
+        );
+      }
+
       await this.dataContext.execute(`TRUNCATE "user" CASCADE;`);
       await this.dataContext.execute(`TRUNCATE "open_ai_model_usage";`);
 

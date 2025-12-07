@@ -111,43 +111,7 @@ describe("Auth Routes", () => {
   });
 
   describe("signup", () => {
-    it("should return a bad request response when request does not match schema", async () => {
-      const response = await request(expressApp)
-        .post("/api/signup")
-        .send({ name: "New User" });
-
-      expect(response.status).toBe(HttpStatusCode.BadRequest);
-
-      expect(response.body).toEqual({
-        success: false,
-        error: expect.objectContaining({
-          code: ApplicationErrorCode.BadRequest,
-        }),
-      });
-    });
-
-    it("should return an invalid email or password response when email is duplicate", async () => {
-      const signupRequest: SignupRequest = {
-        name: "New User",
-        email: mockUsers[0].email,
-        password: "password",
-      };
-
-      const response = await request(expressApp)
-        .post("/api/signup")
-        .send(signupRequest);
-
-      expect(response.status).toBe(HttpStatusCode.BadRequest);
-
-      expect(response.body).toEqual({
-        success: false,
-        error: expect.objectContaining({
-          code: ApplicationErrorCode.InvalidEmailOrPassword,
-        }),
-      });
-    });
-
-    it("should send verification email and return a success response with the user email", async () => {
+    it("should return a resource gone response", async () => {
       const signupRequest: SignupRequest = {
         name: "New User",
         email: "new.user@example.com",
@@ -158,103 +122,33 @@ describe("Auth Routes", () => {
         .post("/api/signup")
         .send(signupRequest);
 
-      expect(response.status).toBe(HttpStatusCode.Ok);
+      expect(response.status).toBe(HttpStatusCode.Gone);
+
       expect(response.body).toEqual({
-        success: true,
-        data: signupRequest.email,
+        success: false,
+        error: expect.objectContaining({
+          code: ApplicationErrorCode.Gone,
+        }),
       });
     });
   });
 
   describe("verifyAccount", () => {
-    it("should return a bad request response when request does not match schema", async () => {
-      const response = await request(expressApp)
-        .post("/api/verify-account")
-        .send({ token: 123 });
-
-      expect(response.status).toBe(HttpStatusCode.BadRequest);
-
-      expect(response.body).toEqual({
-        success: false,
-        error: expect.objectContaining({
-          code: ApplicationErrorCode.BadRequest,
-        }),
-      });
-    });
-
-    it("should return an invalid account verification token response when token is invalid", async () => {
-      const response = await request(expressApp)
-        .post("/api/verify-account")
-        .send({ token: "token" });
-
-      expect(response.status).toBe(HttpStatusCode.BadRequest);
-
-      expect(response.body).toEqual({
-        success: false,
-        error: expect.objectContaining({
-          code: ApplicationErrorCode.InvalidAccountVerificationToken,
-        }),
-      });
-    });
-
-    it("should return an invalid account verification token response when token is not found", async () => {
-      const mockUser = mockUsers[0];
-
-      const verificationToken = jsonwebtoken.sign(
-        { email: mockUser.email },
-        config.ACCOUNT_VERIFICATION_TOKEN_SECRET,
-        { expiresIn: "15m" }
-      );
-
-      const response = await request(expressApp)
-        .post("/api/verify-account")
-        .send({ token: verificationToken });
-
-      expect(response.status).toBe(HttpStatusCode.BadRequest);
-
-      expect(response.body).toEqual({
-        success: false,
-        error: expect.objectContaining({
-          code: ApplicationErrorCode.InvalidAccountVerificationToken,
-        }),
-      });
-    });
-
-    it("should return an invalid account verification token response when token is expired", async () => {
-      const mockUser = mockUsers[0];
-
-      const verificationToken = jsonwebtoken.sign(
-        {
-          email: mockUser.email,
-          exp: addDays(new Date(), -2).getTime() / 1000,
-        },
-        config.ACCOUNT_VERIFICATION_TOKEN_SECRET
-      );
-
-      const response = await request(expressApp)
-        .post("/api/verify-account")
-        .send({ token: verificationToken });
-
-      expect(response.status).toBe(HttpStatusCode.BadRequest);
-
-      expect(response.body).toEqual({
-        success: false,
-        error: expect.objectContaining({
-          code: ApplicationErrorCode.InvalidAccountVerificationToken,
-        }),
-      });
-    });
-
-    it("should return success response with the user email", async () => {
+    it("should return a resource gone response", async () => {
       const mockUser = mockUsers[4];
 
       const response = await request(expressApp)
         .post("/api/verify-account")
         .send({ token: mockUser.verificationToken! });
 
-      expect(response.status).toBe(HttpStatusCode.Ok);
+      expect(response.status).toBe(HttpStatusCode.Gone);
 
-      expect(response.body).toEqual({ success: true, data: mockUser.email });
+      expect(response.body).toEqual({
+        success: false,
+        error: expect.objectContaining({
+          code: ApplicationErrorCode.Gone,
+        }),
+      });
     });
   });
 
@@ -384,138 +278,40 @@ describe("Auth Routes", () => {
   });
 
   describe("recoverPassword", () => {
-    it("should return a bad request response when request does not match schema", async () => {
-      const response = await request(expressApp)
-        .post("/api/recover-password")
-        .send({ email: 123 });
-
-      expect(response.status).toBe(HttpStatusCode.BadRequest);
-
-      expect(response.body).toEqual({
-        success: false,
-        error: expect.objectContaining({
-          code: ApplicationErrorCode.BadRequest,
-        }),
-      });
-    });
-
-    it("should return a bad request response when user is not found", async () => {
-      const response = await request(expressApp)
-        .post("/api/recover-password")
-        .send({ email: "inexistant@example.com" });
-
-      expect(response.status).toBe(HttpStatusCode.BadRequest);
-
-      expect(response.body).toEqual({
-        success: false,
-        error: expect.objectContaining({
-          code: ApplicationErrorCode.BadRequest,
-        }),
-      });
-    });
-
-    it("should return a success response with the user email", async () => {
+    it("should return a resource gone response", async () => {
       const mockUser = mockUsers[0];
 
       const response = await request(expressApp)
         .post("/api/recover-password")
         .send({ email: mockUser.email });
 
-      expect(response.status).toBe(HttpStatusCode.Ok);
+      expect(response.status).toBe(HttpStatusCode.Gone);
 
-      expect(response.body).toEqual({ success: true, data: mockUser.email });
+      expect(response.body).toEqual({
+        success: false,
+        error: expect.objectContaining({
+          code: ApplicationErrorCode.Gone,
+        }),
+      });
     });
   });
 
   describe("resetPassword", () => {
     it("should return a bad request response when request does not match schema", async () => {
-      const response = await request(expressApp)
-        .post("/api/reset-password")
-        .send({ token: "token" });
-
-      expect(response.status).toBe(HttpStatusCode.BadRequest);
-
-      expect(response.body).toEqual({
-        success: false,
-        error: expect.objectContaining({
-          code: ApplicationErrorCode.BadRequest,
-        }),
-      });
-    });
-
-    it("should return an invalid password recovery token response when token is invalid", async () => {
-      const response = await request(expressApp)
-        .post("/api/reset-password")
-        .send({ token: "token", newPassword: "new-password" });
-
-      expect(response.status).toBe(HttpStatusCode.BadRequest);
-
-      expect(response.body).toEqual({
-        success: false,
-        error: expect.objectContaining({
-          code: ApplicationErrorCode.InvalidPasswordRecoveryToken,
-        }),
-      });
-    });
-
-    it("should return an invalid password recovery token response when token is not found", async () => {
-      const mockUser = mockUsers[0];
-
-      const recoveryToken = jsonwebtoken.sign(
-        { email: mockUser.email },
-        config.PASSWORD_RECOVERY_TOKEN_SECRET,
-        { expiresIn: "15m" }
-      );
-
-      const response = await request(expressApp)
-        .post("/api/reset-password")
-        .send({ token: recoveryToken, newPassword: "new-password" });
-
-      expect(response.status).toBe(HttpStatusCode.BadRequest);
-
-      expect(response.body).toEqual({
-        success: false,
-        error: expect.objectContaining({
-          code: ApplicationErrorCode.InvalidPasswordRecoveryToken,
-        }),
-      });
-    });
-
-    it("should return an invalid password recovery token response when token is expired", async () => {
-      const mockUser = mockUsers[0];
-
-      const recoveryToken = jsonwebtoken.sign(
-        {
-          email: mockUser.email,
-          exp: addDays(new Date(), -2).getTime() / 1000,
-        },
-        config.PASSWORD_RECOVERY_TOKEN_SECRET
-      );
-
-      const response = await request(expressApp)
-        .post("/api/reset-password")
-        .send({ token: recoveryToken, newPassword: "new-password" });
-
-      expect(response.status).toBe(HttpStatusCode.BadRequest);
-
-      expect(response.body).toEqual({
-        success: false,
-        error: expect.objectContaining({
-          code: ApplicationErrorCode.InvalidPasswordRecoveryToken,
-        }),
-      });
-    });
-
-    it("should return success response with the user email", async () => {
       const mockUser = mockUsers[5];
 
       const response = await request(expressApp)
         .post("/api/reset-password")
         .send({ token: mockUser.recoveryToken!, newPassword: "new-password" });
 
-      expect(response.status).toBe(HttpStatusCode.Ok);
+      expect(response.status).toBe(HttpStatusCode.Gone);
 
-      expect(response.body).toEqual({ success: true, data: mockUser.email });
+      expect(response.body).toEqual({
+        success: false,
+        error: expect.objectContaining({
+          code: ApplicationErrorCode.Gone,
+        }),
+      });
     });
   });
 });

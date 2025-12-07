@@ -4,7 +4,6 @@ import { addDays } from "date-fns";
 import { DataContext } from "../../../src/data/data-context";
 import { FileStorage } from "../../../src/files/file-storage";
 import { mapUserToDto, User } from "../../../src/models/entities/user";
-import { UpdateUserRequest } from "../../../src/models/requests/user";
 import { DocumentRepository } from "../../../src/repositories/document";
 import { UserRepository } from "../../../src/repositories/user";
 import { AuthContext } from "../../../src/services/auth";
@@ -72,55 +71,6 @@ describe("UserService", () => {
       const response = await userService.getUser(authContext);
 
       expect(response).toEqual(mapUserToDto(mockUser));
-    });
-  });
-
-  describe("updateUser", () => {
-    it("should update user display name and custom prompt and return its id", async () => {
-      const request: UpdateUserRequest = {
-        displayName: "New Display Name",
-        customPrompt: "New Custom Prompt",
-      };
-
-      const response = await userService.updateUser(request, authContext);
-
-      const databaseUsers = await userRepository.findAll();
-
-      expect(databaseUsers).toEqual(
-        expect.arrayContaining(
-          mockUsers.map((user) =>
-            user.id === mockUser.id
-              ? {
-                  ...user,
-                  password: expect.any(String),
-                  displayName: "New Display Name",
-                  customPrompt: "New Custom Prompt",
-                  updatedAt: expect.any(Date),
-                }
-              : { ...user, password: expect.any(String) }
-          )
-        )
-      );
-
-      expect(response).toEqual(mockUser.id);
-    });
-  });
-
-  describe("deleteUser", () => {
-    it("should delete user and return its id", async () => {
-      const response = await userService.deleteUser(authContext);
-
-      const databaseUsers = await userRepository.findAll();
-
-      expect(databaseUsers).toEqual(
-        expect.arrayContaining(
-          mockUsers
-            .filter((user) => user.id !== mockUser.id)
-            .map((user) => ({ ...user, password: expect.any(String) }))
-        )
-      );
-
-      expect(response).toEqual(mockUser.id);
     });
   });
 });

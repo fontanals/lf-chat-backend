@@ -106,39 +106,40 @@ describe("UserService", () => {
   });
 
   describe("updateUser", () => {
-    it("should throw a bad request error when request does not match schema", async () => {
+    it("should throw a resource gone error", async () => {
       try {
-        await userService.updateUser({ name: 123 } as any, authContext);
+        userRepository.findOne.mockResolvedValue(mockUser);
 
-        fail("Expected to throw bad request error");
+        await userService.updateUser(
+          { name: "User Name Updated", displayName: "User" },
+          authContext
+        );
+
+        fail("Expected to throw resource gone error");
       } catch (error) {
         expect(error).toBeInstanceOf(ApplicationError);
         expect((error as ApplicationError).code).toBe(
-          ApplicationErrorCode.BadRequest
+          ApplicationErrorCode.Gone
         );
       }
-    });
-
-    it("should update user and return its id", async () => {
-      userRepository.findOne.mockResolvedValue(mockUser);
-
-      const response = await userService.updateUser(
-        { name: "User Name Updated", displayName: "User" },
-        authContext
-      );
-
-      expect(response).toEqual(mockUser.id);
     });
   });
 
   describe("deleteUser", () => {
-    it("should delete user and return its id", async () => {
-      userRepository.findOne.mockResolvedValue(mockUser);
-      documentRepository.findAll.mockResolvedValue([]);
+    it("should throw a resource gone error", async () => {
+      try {
+        userRepository.findOne.mockResolvedValue(mockUser);
+        documentRepository.findAll.mockResolvedValue([]);
 
-      const response = await userService.deleteUser(authContext);
+        await userService.deleteUser(authContext);
 
-      expect(response).toEqual(mockUser.id);
+        fail("Expected to resource gone error");
+      } catch (error) {
+        expect(error).toBeInstanceOf(ApplicationError);
+        expect((error as ApplicationError).code).toBe(
+          ApplicationErrorCode.Gone
+        );
+      }
     });
   });
 });

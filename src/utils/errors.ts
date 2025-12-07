@@ -4,6 +4,7 @@ export enum HttpStatusCode {
   Unauthorized = 401,
   NotFound = 404,
   Conflict = 409,
+  Gone = 410,
   InternalServerError = 500,
 }
 
@@ -11,6 +12,7 @@ export enum ApplicationErrorCode {
   BadRequest = 400,
   Unauthorized = 401,
   NotFound = 404,
+  Gone = 410,
   InternalServerError = 500,
   InvalidAccountVerificationToken = 1000,
   InvalidEmailOrPassword = 1001,
@@ -63,6 +65,10 @@ export class ApplicationError extends Error {
       ApplicationErrorCode.NotFound,
       "Resource not found."
     );
+  }
+
+  static gone(): ApplicationError {
+    return new ApplicationError(ApplicationErrorCode.Gone, "Resource gone.");
   }
 
   static internalServerError(): ApplicationError {

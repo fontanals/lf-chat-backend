@@ -7,7 +7,7 @@ import { config } from "../config";
 import { IDataContext } from "../data/data-context";
 import { RefreshToken } from "../models/entities/refresh-token";
 import { Session } from "../models/entities/session";
-import { mapUserToDto, User } from "../models/entities/user";
+import { mapUserToDto } from "../models/entities/user";
 import {
   RecoverPasswordRequest,
   ResetPasswordRequest,
@@ -26,10 +26,6 @@ import {
 import { IRefreshTokenRepository } from "../repositories/refresh-token";
 import { ISessionRepository } from "../repositories/session";
 import { IUserRepository } from "../repositories/user";
-import {
-  accountVerificationEmail,
-  passwordRecoveryEmail,
-} from "../utils/emails";
 import { ApplicationError } from "../utils/errors";
 import { validateRequest } from "../utils/express";
 import { IEmailService } from "./email";
@@ -105,97 +101,13 @@ export class AuthService implements IAuthService {
   }
 
   async signup(request: SignupRequest): Promise<SignupResponse> {
-    validateRequest(
-      request,
-      z.object({
-        name: z.string(),
-        email: z.email(),
-        password: z
-          .string()
-          .min(8, "Password must be at least 8 characters long."),
-      })
-    );
-
-    const isInvalidEmail = await this.userRepository.exists({
-      email: request.email,
-      isVerified: true,
-    });
-
-    if (isInvalidEmail) {
-      throw ApplicationError.invalidEmailOrPassword();
-    }
-
-    const hashedPassword = await bcrypt.hash(request.password, 10);
-
-    const accountVerificationCode = jsonwebtoken.sign(
-      { email: request.email },
-      config.ACCOUNT_VERIFICATION_TOKEN_SECRET,
-      { expiresIn: "15m" }
-    );
-
-    const user: User = {
-      id: randomUUID(),
-      name: request.name,
-      email: request.email,
-      password: hashedPassword,
-      displayName: request.name.split(" ")[0],
-      customPrompt: null,
-      verificationToken: accountVerificationCode,
-      recoveryToken: null,
-      isVerified: false,
-    };
-
-    await this.userRepository.create(user);
-
-    if (config.NODE_ENV !== "test") {
-      this.emailService
-        .sendEmail({
-          from: config.SUPPORT_EMAIL,
-          to: user.email,
-          subject: "LF Chat Account Verification",
-          content: accountVerificationEmail(user.name),
-        })
-        .catch((error) => {
-          this.logger.error(
-            "Error sending account verification email: ",
-            error
-          );
-        });
-    }
-
-    return user.email;
+    throw ApplicationError.gone();
   }
 
   async verifyAccount(
     request: VerifyAccountRequest
   ): Promise<VerifyAccountResponse> {
-    validateRequest(request, z.object({ token: z.string() }));
-
-    const validateTokenResult = this.validateToken<{ email: string }>(
-      request.token,
-      config.ACCOUNT_VERIFICATION_TOKEN_SECRET
-    );
-
-    if (!validateTokenResult.isValid) {
-      throw ApplicationError.invalidAccountVerificationToken();
-    }
-
-    const user = await this.userRepository.findOne({
-      email: validateTokenResult.payload.email,
-      verificationToken: request.token,
-      isVerified: false,
-    });
-
-    if (user == null) {
-      throw ApplicationError.invalidAccountVerificationToken();
-    }
-
-    await this.userRepository.update(user.id, {
-      verificationToken: null,
-      isVerified: true,
-    });
-
-    return user.email;
+    throw ApplicationError.gone();
   }
 
   async signin(request: SigninRequest): Promise<{
@@ -293,80 +205,13 @@ export class AuthService implements IAuthService {
   async recoverPassword(
     request: RecoverPasswordRequest
   ): Promise<RecoverPasswordResponse> {
-    validateRequest(request, z.object({ email: z.email() }));
-
-    const user = await this.userRepository.findOne({
-      email: request.email,
-      isVerified: true,
-    });
-
-    if (user == null) {
-      throw ApplicationError.badRequest();
-    }
-
-    const recoveryToken = jsonwebtoken.sign(
-      { email: user.email },
-      config.PASSWORD_RECOVERY_TOKEN_SECRET,
-      { expiresIn: "15m" }
-    );
-
-    await this.userRepository.update(user.id, { recoveryToken });
-
-    if (config.NODE_ENV !== "test") {
-      this.emailService
-        .sendEmail({
-          from: config.SUPPORT_EMAIL,
-          to: user.email,
-          subject: "LF Chat Password Recovery",
-          content: passwordRecoveryEmail(user.name),
-        })
-        .catch((error) => {
-          this.logger.error("Error sending password recovery email: ", error);
-        });
-    }
-
-    return user.email;
+    throw ApplicationError.gone();
   }
 
   async resetPassword(
     request: ResetPasswordRequest
   ): Promise<ResetPasswordResponse> {
-    validateRequest(
-      request,
-      z.object({
-        token: z.string(),
-        newPassword: z
-          .string()
-          .min(8, "Password must be at least 8 characters long."),
-      })
-    );
-
-    const validateTokenResult = this.validateToken<{ email: string }>(
-      request.token,
-      config.PASSWORD_RECOVERY_TOKEN_SECRET
-    );
-
-    if (!validateTokenResult.isValid) {
-      throw ApplicationError.invalidPasswordRecoveryToken();
-    }
-
-    const user = await this.userRepository.findOne({
-      email: validateTokenResult.payload.email,
-      recoveryToken: request.token,
-    });
-
-    if (user == null) {
-      throw ApplicationError.invalidPasswordRecoveryToken();
-    }
-
-    const hashedPassword = await bcrypt.hash(request.newPassword, 10);
-
-    await this.userRepository.update(user.id, {
-      password: hashedPassword,
-      recoveryToken: null,
-    });
-
-    return user.email;
+    throw ApplicationError.gone();
   }
 
   validateAccessToken(accessToken: string): ValidateTokenResult<AuthContext> {

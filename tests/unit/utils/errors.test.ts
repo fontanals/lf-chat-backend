@@ -29,6 +29,14 @@ describe("ApplicationError", () => {
     expect(error.getStatusCode()).toBe(HttpStatusCode.NotFound);
   });
 
+  it("should create a resource gone error and return resource gone http status code", () => {
+    const error = ApplicationError.gone();
+
+    expect(error).toBeInstanceOf(ApplicationError);
+    expect(error.code).toBe(ApplicationErrorCode.Gone);
+    expect(error.getStatusCode()).toBe(HttpStatusCode.Gone);
+  });
+
   it("should create an internal server error and return internal server error http status code", () => {
     const error = ApplicationError.internalServerError();
 

@@ -1,6 +1,6 @@
 import bcrypt from "bcrypt";
 import { randomUUID } from "crypto";
-import { addDays, addMinutes } from "date-fns";
+import { addDays } from "date-fns";
 import jsonwebtoken from "jsonwebtoken";
 import { config } from "../../../src/config";
 import { IDataContext } from "../../../src/data/data-context";
@@ -10,6 +10,7 @@ import {
   RecoverPasswordRequest,
   ResetPasswordRequest,
   SignupRequest,
+  VerifyAccountRequest,
 } from "../../../src/models/requests/auth";
 import { IRefreshTokenRepository } from "../../../src/repositories/refresh-token";
 import { ISessionRepository } from "../../../src/repositories/session";
@@ -109,149 +110,60 @@ describe("AuthService", () => {
   });
 
   describe("signup", () => {
-    it("should throw a bad request error when request does not match request schema", async () => {
+    it("should throw a resource gone error", async () => {
       try {
-        await authService.signup({ name: "New User" } as any);
-
-        fail("Expected to throw bad request error");
-      } catch (error) {
-        expect(error).toBeInstanceOf(ApplicationError);
-        expect((error as ApplicationError).code).toBe(
-          ApplicationErrorCode.BadRequest
-        );
-      }
-    });
-
-    it("should throw an invalid email or password error when email is duplicate", async () => {
-      try {
-        userRepository.exists.mockResolvedValue(true);
-
-        await authService.signup({
+        const request: SignupRequest = {
           name: "New User",
           email: "new.user@example.com",
           password: "password",
-        });
+        };
 
-        fail("Expected to throw invaid email or password error");
+        await authService.signup(request);
+
+        fail("Expected to throw resource gone error");
       } catch (error) {
         expect(error).toBeInstanceOf(ApplicationError);
         expect((error as ApplicationError).code).toBe(
-          ApplicationErrorCode.InvalidEmailOrPassword
+          ApplicationErrorCode.Gone
         );
       }
-    });
-
-    it("should send email for account verification and return user email", async () => {
-      const request: SignupRequest = {
-        name: "New User",
-        email: "new.user@example.com",
-        password: "password",
-      };
-
-      const response = await authService.signup(request);
-
-      expect(response).toBe(request.email);
     });
   });
 
   describe("verifyAccount", () => {
-    it("should throw a bad request error when request does not match schema", async () => {
+    it("should throw a resource gone error", async () => {
       try {
-        await authService.verifyAccount({ token: 123 } as any);
-
-        fail("Expected to throw bad request error");
-      } catch (error) {
-        expect(error).toBeInstanceOf(ApplicationError);
-        expect((error as ApplicationError).code).toBe(
-          ApplicationErrorCode.BadRequest
+        const verificationToken = jsonwebtoken.sign(
+          { email: "new.user@example.com" },
+          config.ACCOUNT_VERIFICATION_TOKEN_SECRET,
+          { expiresIn: "15m" }
         );
-      }
-    });
 
-    it("should throw an invalid account verification token error when verification token is invalid", async () => {
-      try {
-        await authService.verifyAccount({ token: "token" });
-
-        fail("Expected to throw bad request error");
-      } catch (error) {
-        expect(error).toBeInstanceOf(ApplicationError);
-        expect((error as ApplicationError).code).toBe(
-          ApplicationErrorCode.InvalidAccountVerificationToken
-        );
-      }
-    });
-
-    it("should throw an invalid account verification token error when verification token is not found", async () => {
-      const verificationToken = jsonwebtoken.sign(
-        { email: "new.user@example.com" },
-        config.ACCOUNT_VERIFICATION_TOKEN_SECRET,
-        { expiresIn: "15m" }
-      );
-
-      userRepository.findOne.mockResolvedValue(null);
-
-      try {
-        await authService.verifyAccount({ token: verificationToken });
-
-        fail("Expected to throw bad request error");
-      } catch (error) {
-        expect(error).toBeInstanceOf(ApplicationError);
-        expect((error as ApplicationError).code).toBe(
-          ApplicationErrorCode.InvalidAccountVerificationToken
-        );
-      }
-    });
-
-    it("should throw an invalid account verification token error when verification token is expired", async () => {
-      const verificationToken = jsonwebtoken.sign(
-        {
+        userRepository.findOne.mockResolvedValue({
+          id: randomUUID(),
+          name: "New User",
           email: "new.user@example.com",
-          iat: addDays(new Date(), -2).getTime() / 1000,
-          exp: addMinutes(addDays(new Date(), -2), 15).getTime() / 1000,
-        },
-        config.ACCOUNT_VERIFICATION_TOKEN_SECRET
-      );
+          password: "password",
+          displayName: "New User",
+          customPrompt: null,
+          verificationToken,
+          recoveryToken: null,
+          isVerified: false,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        });
 
-      userRepository.findOne.mockResolvedValue(null);
+        const request: VerifyAccountRequest = { token: verificationToken };
 
-      try {
-        await authService.verifyAccount({ token: verificationToken });
+        await authService.verifyAccount(request);
 
-        fail("Expected to throw bad request error");
+        fail("Expected to throw resource gone error");
       } catch (error) {
         expect(error).toBeInstanceOf(ApplicationError);
         expect((error as ApplicationError).code).toBe(
-          ApplicationErrorCode.InvalidAccountVerificationToken
+          ApplicationErrorCode.Gone
         );
       }
-    });
-
-    it("should verify account and return email", async () => {
-      const verificationToken = jsonwebtoken.sign(
-        { email: "new.user@example.com" },
-        config.ACCOUNT_VERIFICATION_TOKEN_SECRET,
-        { expiresIn: "15m" }
-      );
-
-      userRepository.findOne.mockResolvedValue({
-        id: randomUUID(),
-        name: "New User",
-        email: "new.user@example.com",
-        password: "password",
-        displayName: "New User",
-        customPrompt: null,
-        verificationToken,
-        recoveryToken: null,
-        isVerified: false,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      });
-
-      const response = await authService.verifyAccount({
-        token: verificationToken,
-      });
-
-      expect(response).toBe("new.user@example.com");
     });
   });
 
@@ -359,152 +271,73 @@ describe("AuthService", () => {
   });
 
   describe("recoverPassword", () => {
-    it("should throw a bad request error when request does not match schema", async () => {
+    it("should throw a resource gone error", async () => {
       try {
-        await authService.recoverPassword({ email: 123 } as any);
+        userRepository.findOne.mockResolvedValue({
+          id: randomUUID(),
+          name: "User 1",
+          email: "user1@example.com",
+          password: "password",
+          displayName: "User 1",
+          customPrompt: null,
+          verificationToken: null,
+          recoveryToken: null,
+          isVerified: true,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        });
 
-        fail("Expected to throw bad request error");
+        const request: RecoverPasswordRequest = { email: "user1@example.com" };
+
+        await authService.recoverPassword(request);
+
+        fail("Expected to throw resource gone error");
       } catch (error) {
         expect(error).toBeInstanceOf(ApplicationError);
         expect((error as ApplicationError).code).toBe(
-          ApplicationErrorCode.BadRequest
+          ApplicationErrorCode.Gone
         );
       }
-    });
-
-    it("should send email for password recovery and return user email", async () => {
-      userRepository.findOne.mockResolvedValue({
-        id: randomUUID(),
-        name: "User 1",
-        email: "user1@example.com",
-        password: "password",
-        displayName: "User 1",
-        customPrompt: null,
-        verificationToken: null,
-        recoveryToken: null,
-        isVerified: true,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      });
-
-      const request: RecoverPasswordRequest = { email: "user1@example.com" };
-
-      const response = await authService.recoverPassword(request);
-
-      expect(response).toBe(request.email);
     });
   });
 
   describe("resetPassword", () => {
-    it("should throw a bad request error when request does not match schema", async () => {
+    it("should throw a resource gone error", async () => {
       try {
-        await authService.resetPassword({ token: "token" } as any);
-
-        fail("Expected to throw bad request error");
-      } catch (error) {
-        expect(error).toBeInstanceOf(ApplicationError);
-        expect((error as ApplicationError).code).toBe(
-          ApplicationErrorCode.BadRequest
+        const recoveryToken = jsonwebtoken.sign(
+          { email: "user1@example.com" },
+          config.PASSWORD_RECOVERY_TOKEN_SECRET,
+          { expiresIn: "15m" }
         );
-      }
-    });
 
-    it("should throw an invalid password recovery token error when token is invalid", async () => {
-      try {
-        await authService.resetPassword({
-          token: "token",
-          newPassword: "new-password",
-        });
-
-        fail("Expected to throw bad request error");
-      } catch (error) {
-        expect(error).toBeInstanceOf(ApplicationError);
-        expect((error as ApplicationError).code).toBe(
-          ApplicationErrorCode.InvalidPasswordRecoveryToken
-        );
-      }
-    });
-
-    it("should throw an invalid password recovery token error when token is not found", async () => {
-      const recoveryToken = jsonwebtoken.sign(
-        { email: "user1@example.com" },
-        config.PASSWORD_RECOVERY_TOKEN_SECRET,
-        { expiresIn: "15m" }
-      );
-
-      userRepository.findOne.mockResolvedValue(null);
-
-      try {
-        await authService.resetPassword({
-          token: recoveryToken,
-          newPassword: "new-password",
-        });
-
-        fail("Expected to throw bad request error");
-      } catch (error) {
-        expect(error).toBeInstanceOf(ApplicationError);
-        expect((error as ApplicationError).code).toBe(
-          ApplicationErrorCode.InvalidPasswordRecoveryToken
-        );
-      }
-    });
-
-    it("should throw an invalid password recovery token error when token is expired", async () => {
-      const recoveryToken = jsonwebtoken.sign(
-        {
+        userRepository.findOne.mockResolvedValue({
+          id: randomUUID(),
+          name: "User 1",
           email: "user1@example.com",
-          iat: addDays(new Date(), -2).getTime() / 1000,
-          exp: addMinutes(addDays(new Date(), -2), 15).getTime() / 1000,
-        },
-        config.PASSWORD_RECOVERY_TOKEN_SECRET
-      );
-
-      userRepository.findOne.mockResolvedValue(null);
-
-      try {
-        await authService.resetPassword({
-          token: recoveryToken,
-          newPassword: "new-password",
+          password: "password",
+          displayName: "User 1",
+          customPrompt: null,
+          verificationToken: null,
+          recoveryToken,
+          isVerified: true,
+          createdAt: new Date(),
+          updatedAt: new Date(),
         });
 
-        fail("Expected to throw bad request error");
+        const request: ResetPasswordRequest = {
+          token: recoveryToken,
+          newPassword: "new-password",
+        };
+
+        await authService.resetPassword(request);
+
+        fail("Expected to throw resource gone error");
       } catch (error) {
         expect(error).toBeInstanceOf(ApplicationError);
         expect((error as ApplicationError).code).toBe(
-          ApplicationErrorCode.InvalidPasswordRecoveryToken
+          ApplicationErrorCode.Gone
         );
       }
-    });
-
-    it("should reset password and return user email", async () => {
-      const recoveryToken = jsonwebtoken.sign(
-        { email: "user1@example.com" },
-        config.PASSWORD_RECOVERY_TOKEN_SECRET,
-        { expiresIn: "15m" }
-      );
-
-      userRepository.findOne.mockResolvedValue({
-        id: randomUUID(),
-        name: "User 1",
-        email: "user1@example.com",
-        password: "password",
-        displayName: "User 1",
-        customPrompt: null,
-        verificationToken: null,
-        recoveryToken,
-        isVerified: true,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      });
-
-      const request: ResetPasswordRequest = {
-        token: recoveryToken,
-        newPassword: "new-password",
-      };
-
-      const response = await authService.resetPassword(request);
-
-      expect(response).toBe("user1@example.com");
     });
   });
 
