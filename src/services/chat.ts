@@ -271,11 +271,14 @@ export class ChatService implements IChatService {
       .filter((contentBlock) => contentBlock.type === "document")
       .map((contentBlock) => contentBlock.id);
 
-    const documents = await this.documentRepository.findAny({
-      chatId: chat.id,
-      projectId: request.projectId,
-      ids: messageDocumentIds,
-    });
+    const documents = await this.documentRepository.getChatContextDocuments(
+      {
+        ids: messageDocumentIds,
+        chatId: chat.id,
+        projectId: request.projectId,
+      },
+      authContext.user.id
+    );
 
     try {
       await this.dataContext.begin();
@@ -293,19 +296,22 @@ export class ChatService implements IChatService {
 
     onSendEvent({ event: "start" });
 
-    const assistantMessage = await this.assistantService.sendMessage({
-      previousMessages: [],
-      userMessage: userMessage,
-      userCustomPrompt: user?.customPrompt,
-      project,
-      documents,
-      onMessagePart: (messagePart) =>
-        onSendEvent({
-          event: messagePart.type,
-          data: messagePart,
-        } as SendMessageEvent),
-      abortSignal,
-    });
+    const assistantMessage = await this.assistantService.sendMessage(
+      {
+        previousMessages: [],
+        userMessage: userMessage,
+        userCustomPrompt: user?.customPrompt,
+        project,
+        documents,
+        onMessagePart: (messagePart) =>
+          onSendEvent({
+            event: messagePart.type,
+            data: messagePart,
+          } as SendMessageEvent),
+        abortSignal,
+      },
+      authContext
+    );
 
     await this.messageRepository.create(assistantMessage);
 
@@ -380,29 +386,35 @@ export class ChatService implements IChatService {
       .filter((contentBlock) => contentBlock.type === "document")
       .map((contentBlock) => contentBlock.id);
 
-    const documents = await this.documentRepository.findAny({
-      chatId: chat.id,
-      projectId: chat.projectId,
-      ids: messageDocumentIds,
-    });
+    const documents = await this.documentRepository.getChatContextDocuments(
+      {
+        ids: messageDocumentIds,
+        chatId: chat.id,
+        projectId: chat.projectId,
+      },
+      authContext.user.id
+    );
 
     await this.messageRepository.create(userMessage);
 
     onSendEvent({ event: "start" });
 
-    const assistantMessage = await this.assistantService.sendMessage({
-      previousMessages,
-      userMessage: userMessage,
-      userCustomPrompt: user?.customPrompt,
-      project: chat.project,
-      documents,
-      onMessagePart: (messagePart) =>
-        onSendEvent({
-          event: messagePart.type,
-          data: messagePart,
-        } as SendMessageEvent),
-      abortSignal,
-    });
+    const assistantMessage = await this.assistantService.sendMessage(
+      {
+        previousMessages,
+        userMessage: userMessage,
+        userCustomPrompt: user?.customPrompt,
+        project: chat.project,
+        documents,
+        onMessagePart: (messagePart) =>
+          onSendEvent({
+            event: messagePart.type,
+            data: messagePart,
+          } as SendMessageEvent),
+        abortSignal,
+      },
+      authContext
+    );
 
     await this.messageRepository.create(assistantMessage);
 

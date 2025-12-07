@@ -34,6 +34,7 @@ import { IOpenAiModelUsageRepository } from "../repositories/open-ai-model-usage
 import { StringUtils } from "../utils/strings";
 import { AiService } from "./ai";
 import { MockAssistantService } from "./assistant-mock";
+import { AuthContext } from "./auth";
 import { ILogger } from "./logger";
 
 export type AssistantStatus = "open-ai" | "mock";
@@ -52,7 +53,10 @@ export interface IAssistantService {
   getStatus(): Promise<AssistantStatus>;
   isContentValid(content: string): Promise<boolean>;
   generateChatTitle(messages: Message[]): Promise<string>;
-  sendMessage(options: SendMessageOptions): Promise<AssistantMessage>;
+  sendMessage(
+    options: SendMessageOptions,
+    authContext: AuthContext
+  ): Promise<AssistantMessage>;
 }
 
 export class AssistantService implements IAssistantService {
@@ -149,14 +153,17 @@ If the conversation is a question, phrase the title as a topic rather than a ful
     return result.object.title;
   }
 
-  async sendMessage(options: SendMessageOptions): Promise<AssistantMessage> {
+  async sendMessage(
+    options: SendMessageOptions,
+    authContext: AuthContext
+  ): Promise<AssistantMessage> {
     const openAiGlobalUsage = await this.getOpenAiGlobalUsage();
 
     if (
       openAiGlobalUsage.totalCostInDollars >=
       config.OPENAI_MONTHLY_USAGE_LIMIT_IN_DOLLARS
     ) {
-      return this.mockAssistantService.sendMessage(options);
+      return this.mockAssistantService.sendMessage(options, authContext);
     }
 
     const openAiModelUsageData: OpenAiModelUsage[] = [];
@@ -208,7 +215,11 @@ If the conversation is a question, phrase the title as a topic rather than a ful
         model: openai(config.OPENAI_MAIN_MODEL),
         system: this.getSystemPrompt(options),
         prompt: this.getModelMessages(options),
-        tools: this.getTools(options, openAiModelUsageData),
+        tools: this.getTools(
+          options,
+          authContext.user.id,
+          openAiModelUsageData
+        ),
         stopWhen: stepCountIs(10),
         abortSignal: options.abortSignal,
       });
@@ -638,6 +649,7 @@ Use these tools proactively when users ask about uploaded documents.
 
   getTools(
     options: SendMessageOptions,
+    userId: string,
     openAiModelUsageData: OpenAiModelUsage[]
   ) {
     const tools = {
@@ -654,6 +666,7 @@ Use these tools proactively when users ask about uploaded documents.
           this.processDocument(
             input,
             options.userMessage.chatId,
+            userId,
             openAiModelUsageData
           ),
       }),
@@ -670,7 +683,8 @@ Use these tools proactively when users ask about uploaded documents.
           z.object({ success: z.literal(true), data: z.string() }),
           z.object({ success: z.literal(false), error: z.string() }),
         ]),
-        execute: (input) => this.readDocument(input, openAiModelUsageData),
+        execute: (input) =>
+          this.readDocument(input, userId, openAiModelUsageData),
       }),
     };
 
@@ -680,10 +694,14 @@ Use these tools proactively when users ask about uploaded documents.
   async processDocument(
     input: ProcessDocumentToolInput,
     chatId: string,
+    userId: string,
     openAiModelUsageData: OpenAiModelUsage[]
   ): Promise<ProcessDocumentToolOutput> {
     try {
-      const document = await this.documentRepository.findOne({ id: input.id });
+      const document = await this.documentRepository.findOne({
+        id: input.id,
+        userId,
+      });
 
       if (document == null) {
         throw new Error("Document not found.");
@@ -750,10 +768,14 @@ Use these tools proactively when users ask about uploaded documents.
 
   async readDocument(
     input: ReadDocumentToolInput,
+    userId: string,
     openAiModelUsageData: OpenAiModelUsage[]
   ): Promise<ReadDocumentToolOutput> {
     try {
-      const document = await this.documentRepository.findOne({ id: input.id });
+      const document = await this.documentRepository.findOne({
+        id: input.id,
+        userId,
+      });
 
       if (document == null) {
         throw new Error("Document not found.");

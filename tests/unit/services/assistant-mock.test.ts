@@ -4,11 +4,37 @@ import {
   TextContentBlock,
   UserMessage,
 } from "../../../src/models/entities/message";
+import { User } from "../../../src/models/entities/user";
 import { MockAssistantService } from "../../../src/services/assistant-mock";
+import { AuthContext } from "../../../src/services/auth";
 import { StringUtils } from "../../../src/utils/strings";
 
 describe("MockAssistantService", () => {
   let mockAssistantService: MockAssistantService;
+
+  const mockUser: User = {
+    id: randomUUID(),
+    name: "User 1",
+    email: "user1@example.com",
+    password: "password",
+    displayName: "User 1",
+    customPrompt: null,
+    verificationToken: null,
+    recoveryToken: null,
+    isVerified: true,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
+
+  const authContext: AuthContext = {
+    session: {
+      id: randomUUID(),
+      expiresAt: new Date().toISOString(),
+      userId: mockUser.id,
+      createdAt: new Date().toISOString(),
+    },
+    user: { id: mockUser.id, name: mockUser.name, email: mockUser.email },
+  };
 
   beforeEach(() => {
     mockAssistantService = new MockAssistantService();
@@ -55,73 +81,76 @@ describe("MockAssistantService", () => {
       const contentBlocks: AssistantContentBlock[] = [];
       const contentBlocksMap = new Map<string, AssistantContentBlock>();
 
-      const assistantMessage = await mockAssistantService.sendMessage({
-        previousMessages: [],
-        userMessage: userMessage,
-        onMessagePart: (messagePart) => {
-          switch (messagePart.type) {
-            case "message-start": {
-              messageId = messagePart.messageId;
+      const assistantMessage = await mockAssistantService.sendMessage(
+        {
+          previousMessages: [],
+          userMessage: userMessage,
+          onMessagePart: (messagePart) => {
+            switch (messagePart.type) {
+              case "message-start": {
+                messageId = messagePart.messageId;
 
-              expect(messagePart).toEqual({
-                type: "message-start",
-                messageId: expect.any(String),
-              });
+                expect(messagePart).toEqual({
+                  type: "message-start",
+                  messageId: expect.any(String),
+                });
 
-              break;
+                break;
+              }
+              case "text-start": {
+                contentBlocksMap.set(messagePart.id, {
+                  type: "text",
+                  id: messagePart.id,
+                  text: "",
+                });
+
+                expect(messagePart).toEqual({
+                  type: "text-start",
+                  id: expect.any(String),
+                  messageId: messageId,
+                });
+
+                break;
+              }
+              case "text-delta": {
+                const contentBlock = contentBlocksMap.get(messagePart.id)!;
+
+                (contentBlock as TextContentBlock).text += messagePart.delta;
+
+                expect(messagePart).toEqual({
+                  type: "text-delta",
+                  id: contentBlock.id,
+                  delta: expect.any(String),
+                  messageId: messageId,
+                });
+
+                break;
+              }
+              case "text-end": {
+                const contentBlock = contentBlocksMap.get(messagePart.id)!;
+
+                contentBlocks.push(contentBlock);
+
+                expect(messagePart).toEqual({
+                  type: "text-end",
+                  id: expect.any(String),
+                  messageId: messageId,
+                });
+
+                break;
+              }
+              case "message-end": {
+                expect(messagePart).toEqual({
+                  type: "message-end",
+                  finishReason: "stop",
+                  messageId: messageId,
+                });
+              }
             }
-            case "text-start": {
-              contentBlocksMap.set(messagePart.id, {
-                type: "text",
-                id: messagePart.id,
-                text: "",
-              });
-
-              expect(messagePart).toEqual({
-                type: "text-start",
-                id: expect.any(String),
-                messageId: messageId,
-              });
-
-              break;
-            }
-            case "text-delta": {
-              const contentBlock = contentBlocksMap.get(messagePart.id)!;
-
-              (contentBlock as TextContentBlock).text += messagePart.delta;
-
-              expect(messagePart).toEqual({
-                type: "text-delta",
-                id: contentBlock.id,
-                delta: expect.any(String),
-                messageId: messageId,
-              });
-
-              break;
-            }
-            case "text-end": {
-              const contentBlock = contentBlocksMap.get(messagePart.id)!;
-
-              contentBlocks.push(contentBlock);
-
-              expect(messagePart).toEqual({
-                type: "text-end",
-                id: expect.any(String),
-                messageId: messageId,
-              });
-
-              break;
-            }
-            case "message-end": {
-              expect(messagePart).toEqual({
-                type: "message-end",
-                finishReason: "stop",
-                messageId: messageId,
-              });
-            }
-          }
+          },
         },
-      });
+        authContext
+      );
 
       expect(assistantMessage).toEqual({
         id: messageId,

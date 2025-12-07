@@ -189,31 +189,6 @@ describe("DocumentRepository", () => {
     });
   });
 
-  describe("findAny", () => {
-    it("should return an empty array when passing no filters", async () => {
-      const databaseDocuments = await documentRepository.findAny();
-
-      expect(databaseDocuments).toEqual([]);
-    });
-
-    it("should return chat and project documents sorted by creation date", async () => {
-      const mockChat = mockChats[25];
-
-      const databaseDocuments = await documentRepository.findAny({
-        chatId: mockChat.id,
-        projectId: mockChat.projectId,
-      });
-
-      expect(databaseDocuments).toEqual(
-        mockDocuments.filter(
-          (document) =>
-            document.chatId === mockChat.id ||
-            document.projectId === mockChat.projectId
-        )
-      );
-    });
-  });
-
   describe("findOne", () => {
     it("should return null when document does not exist", async () => {
       const databaseDocument = await documentRepository.findOne({
@@ -316,6 +291,26 @@ describe("DocumentRepository", () => {
       expect(databaseDocuments).toEqual(
         expect.arrayContaining(
           mockDocuments.filter((document) => document.id !== mockDocument.id)
+        )
+      );
+    });
+  });
+
+  describe("getChatContextDocuments", () => {
+    it("should return chat and project documents sorted by creation date", async () => {
+      const mockChat = mockChats[25];
+
+      const databaseDocuments =
+        await documentRepository.getChatContextDocuments(
+          { ids: [], chatId: mockChat.id, projectId: mockChat.projectId },
+          mockChat.userId
+        );
+
+      expect(databaseDocuments).toEqual(
+        mockDocuments.filter(
+          (document) =>
+            document.chatId === mockChat.id ||
+            document.projectId === mockChat.projectId
         )
       );
     });

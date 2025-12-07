@@ -16,6 +16,7 @@ import { OpenAiModelUsageRepository } from "../../../src/repositories/open-ai-mo
 import { aiService } from "../../../src/services/ai";
 import { AssistantService } from "../../../src/services/assistant";
 import { MockAssistantService } from "../../../src/services/assistant-mock";
+import { AuthContext } from "../../../src/services/auth";
 import { Logger } from "../../../src/services/logger";
 import { StringUtils } from "../../../src/utils/strings";
 import {
@@ -59,6 +60,16 @@ describe("AssistantService", () => {
     isVerified: true,
     createdAt: new Date(),
     updatedAt: new Date(),
+  };
+
+  const authContext: AuthContext = {
+    session: {
+      id: randomUUID(),
+      expiresAt: new Date().toISOString(),
+      userId: mockUser.id,
+      createdAt: new Date().toISOString(),
+    },
+    user: { id: mockUser.id, name: mockUser.name, email: mockUser.email },
   };
 
   const mockChat: Chat = {
@@ -150,79 +161,82 @@ describe("AssistantService", () => {
       const contentBlocks: AssistantContentBlock[] = [];
       const contentBlocksMap = new Map<string, AssistantContentBlock>();
 
-      const assistantMessage = await assistantService.sendMessage({
-        previousMessages: mockMessages,
-        userMessage,
-        onMessagePart: (messagePart) => {
-          switch (messagePart.type) {
-            case "message-start": {
-              messageId = messagePart.messageId;
+      const assistantMessage = await assistantService.sendMessage(
+        {
+          previousMessages: mockMessages,
+          userMessage,
+          onMessagePart: (messagePart) => {
+            switch (messagePart.type) {
+              case "message-start": {
+                messageId = messagePart.messageId;
 
-              break;
-            }
-            case "text-start": {
-              contentBlocksMap.set(messagePart.id, {
-                type: "text",
-                id: messagePart.id,
-                text: "",
-              });
-
-              break;
-            }
-            case "text-delta": {
-              const contentBlock = contentBlocksMap.get(messagePart.id);
-
-              if (contentBlock != null && contentBlock.type === "text") {
-                contentBlock.text += messagePart.delta;
+                break;
               }
+              case "text-start": {
+                contentBlocksMap.set(messagePart.id, {
+                  type: "text",
+                  id: messagePart.id,
+                  text: "",
+                });
 
-              break;
-            }
-            case "text-end": {
-              const contentBlock = contentBlocksMap.get(messagePart.id);
-
-              if (contentBlock != null) {
-                contentBlocks.push(contentBlock);
+                break;
               }
+              case "text-delta": {
+                const contentBlock = contentBlocksMap.get(messagePart.id);
 
-              break;
-            }
-            case "tool-call-start": {
-              contentBlocksMap.set(messagePart.id, {
-                type: "tool-call",
-                id: messagePart.id,
-                name: messagePart.name,
-              } as ToolCallContentBlock);
+                if (contentBlock != null && contentBlock.type === "text") {
+                  contentBlock.text += messagePart.delta;
+                }
 
-              break;
-            }
-            case "tool-call-result": {
-              const contentBlock = contentBlocksMap.get(messagePart.id);
-
-              if (contentBlock != null && contentBlock.type === "tool-call") {
-                contentBlock.input = messagePart.input;
-                contentBlock.output = messagePart.output;
+                break;
               }
+              case "text-end": {
+                const contentBlock = contentBlocksMap.get(messagePart.id);
 
-              break;
-            }
-            case "tool-call-end": {
-              const contentBlock = contentBlocksMap.get(messagePart.id);
+                if (contentBlock != null) {
+                  contentBlocks.push(contentBlock);
+                }
 
-              if (contentBlock != null) {
-                contentBlocks.push(contentBlock);
+                break;
               }
+              case "tool-call-start": {
+                contentBlocksMap.set(messagePart.id, {
+                  type: "tool-call",
+                  id: messagePart.id,
+                  name: messagePart.name,
+                } as ToolCallContentBlock);
 
-              break;
-            }
-            case "message-end": {
-              finishReason = messagePart.finishReason;
+                break;
+              }
+              case "tool-call-result": {
+                const contentBlock = contentBlocksMap.get(messagePart.id);
 
-              break;
+                if (contentBlock != null && contentBlock.type === "tool-call") {
+                  contentBlock.input = messagePart.input;
+                  contentBlock.output = messagePart.output;
+                }
+
+                break;
+              }
+              case "tool-call-end": {
+                const contentBlock = contentBlocksMap.get(messagePart.id);
+
+                if (contentBlock != null) {
+                  contentBlocks.push(contentBlock);
+                }
+
+                break;
+              }
+              case "message-end": {
+                finishReason = messagePart.finishReason;
+
+                break;
+              }
             }
-          }
+          },
         },
-      });
+        authContext
+      );
 
       expect(assistantMessage).toEqual({
         id: messageId,

@@ -10,6 +10,7 @@ import {
   IAssistantService,
   SendMessageOptions,
 } from "./assistant";
+import { AuthContext } from "./auth";
 
 const mockChats = [
   {
@@ -141,7 +142,10 @@ export class MockAssistantService implements IAssistantService {
       : "Imagine a title here ✨";
   }
 
-  async sendMessage(options: SendMessageOptions): Promise<AssistantMessage> {
+  async sendMessage(
+    options: SendMessageOptions,
+    authContext: AuthContext
+  ): Promise<AssistantMessage> {
     const response: AssistantMessage = {
       id: randomUUID(),
       role: "assistant",

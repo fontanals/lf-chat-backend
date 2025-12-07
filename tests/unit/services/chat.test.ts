@@ -159,11 +159,11 @@ describe("ChatService", () => {
       count: jest.fn(),
       exists: jest.fn(),
       findAll: jest.fn(),
-      findAny: jest.fn(),
       findOne: jest.fn(),
       create: jest.fn(),
       update: jest.fn(),
       delete: jest.fn(),
+      getChatContextDocuments: jest.fn(),
       getAllUserChatDocuments: jest.fn(),
     };
 
