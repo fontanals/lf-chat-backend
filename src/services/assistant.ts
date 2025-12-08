@@ -415,6 +415,71 @@ If the conversation is a question, phrase the title as a topic rather than a ful
 
             break;
           }
+          case "tool-error": {
+            const contentBlock = contentBlocks.get(part.toolCallId);
+
+            if (
+              contentBlock != null &&
+              contentBlock.type === "tool-call" &&
+              contentBlock.name === "processDocument"
+            ) {
+              contentBlock.input = part.input as ProcessDocumentToolInput;
+              contentBlock.output = {
+                success: false,
+                error: (part.error as Error).message,
+              };
+
+              response.content.push(contentBlock);
+
+              options.onMessagePart({
+                type: "tool-call-result",
+                id: part.toolCallId,
+                name: "processDocument",
+                input: part.input as ProcessDocumentToolInput,
+                output: contentBlock.output,
+                messageId: response.id,
+              });
+
+              options.onMessagePart({
+                type: "tool-call-end",
+                id: part.toolCallId,
+                name: "processDocument",
+                messageId: response.id,
+              });
+            }
+
+            if (
+              contentBlock != null &&
+              contentBlock.type === "tool-call" &&
+              contentBlock.name === "readDocument"
+            ) {
+              contentBlock.input = part.input as ReadDocumentToolInput;
+              contentBlock.output = {
+                success: false,
+                error: (part.error as Error).message,
+              };
+
+              response.content.push(contentBlock);
+
+              options.onMessagePart({
+                type: "tool-call-result",
+                id: part.toolCallId,
+                name: "readDocument",
+                input: part.input as ReadDocumentToolInput,
+                output: contentBlock.output,
+                messageId: response.id,
+              });
+
+              options.onMessagePart({
+                type: "tool-call-end",
+                id: part.toolCallId,
+                name: "readDocument",
+                messageId: response.id,
+              });
+            }
+
+            break;
+          }
           case "abort": {
             response.finishReason = "interrupted";
 
