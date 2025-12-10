@@ -4,32 +4,46 @@ REST API for an AI chat application similar to ChatGPT and Claude.ai. Users can 
 
 ## Features
 
-- **OpenAI Integration**: Real-time streaming conversations with OpenAI models through Server-Sent Events (SSE)
-- **Conversation Branching**: Edit and resend messages from any point in the conversation to explore different response paths while maintaining full conversation history in a tree structure
-- **Project Organization**: Group chats and documents into projects for better organization and context-focused responses
-- **RAG**: Upload PDF and TXT documents for context-aware responses using RAG (Retrieval-Augmented Generation) with vector search
-- **File Upload**: File upload using AWS S3 as file storage
-- **Authentication**: Authentication with JWT access and refresh tokens
-- **OpenAI Usage Tracking**: OpenAI API usage tracking with configurable monthly cost limits and mock responses when limit is reached
-- **Logging**: File logger with daily rotation using Winston
-- **Docker Multi-Environment Setup**: Dedicated environment setups using Docker Compose
-- **Automated Tests**: Unit and integration tests using Jest
-- **CI/CD**: CI/CD with github actions
+- **Real-time AI Streaming**: OpenAI integration with Server-Sent Events (SSE) for live conversation responses
+- **Conversation Branching**: Edit and resend messages from any point to explore different response paths with full conversation history in a tree structure
+- **RAG (Retrieval-Augmented Generation)**: Upload PDF/TXT documents (max 1MB) for context-aware responses using vector search with pgvector embeddings
+- **AI Document Processing**: Automated document chunking, embedding, and semantic search with AI-powered tools
+- **Project Organization**: Group chats and documents into projects for organized, context-focused conversations
+- **JWT Authentication**: Secure access and refresh token system with email verification and password recovery
+- **Content Moderation**: Automatic content filtering using OpenAI's moderation API
+- **Message Feedback System**: Rate assistant responses with like/dislike/neutral ratings
+- **API Usage Tracking**: Real-time OpenAI cost monitoring with configurable monthly limits and automatic fallback
+- **Rate Limiting**: Configurable request throttling for API protection
+- **AWS S3 Integration**: Secure file storage and management
+- **Session Management**: Tracked user sessions with automatic expiration
+- **OpenAPI Documentation**: Interactive Swagger UI for API exploration
+- **Automated Testing**: Comprehensive unit and integration tests with Jest and Supertest
+- **Docker Multi-Environment**: Separate development and test environments with Docker Compose
+- **Structured Logging**: Daily rotated file logs with Winston
+- **CI/CD Pipelines**: Automated workflows with GitHub Actions
 
 ## Technologies
 
-- Typescript
-- Express JS
-- PostgreSQL
-- PG Vector
-- Vercel AI SDK
-- AWS S3 SDK
-- OAuth 2.0 Authentication using JWT
-- OpenAPI documentation with Swagger
-- Jest
-- Docker
-- Docker Compose
-- CI/CD with Github Actions
+- **TypeScript** - Type-safe development with strict mode
+- **Node.js** - Runtime environment
+- **Express** - Web framework
+- **PostgreSQL** - Relational database
+- **pgvector** - Vector embeddings for semantic search
+- **OpenAI API** - AI model integration
+- **Vercel AI SDK** - LLM abstraction layer
+- **AWS S3** - Cloud file storage
+- **JWT (jsonwebtoken)** - Token-based authentication
+- **bcrypt** - Password hashing and security
+- **Zod** - Runtime schema validation
+- **Multer** - File upload handling
+- **Nodemailer** - Email service (SMTP)
+- **pdf-parse** - PDF document processing
+- **Winston** - Structured logging with rotation
+- **Jest** - Testing framework
+- **Supertest** - API integration testing
+- **Docker & Docker Compose** - Containerization
+- **GitHub Actions** - CI/CD automation
+- **Swagger/OpenAPI** - API documentation
 
 ## Prerequisites
 
