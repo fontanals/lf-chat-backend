@@ -15,7 +15,7 @@ The following endpoints are **disabled** for security and demo purposes:
 - **PUT /api/user** - Update user is disabled
 - **DELETE /api/user** - Delete user is disabled
 
-Live demo: https://lfchat.lucasfontana.dev
+Live demo: deactivated
 
 ## Features
 
